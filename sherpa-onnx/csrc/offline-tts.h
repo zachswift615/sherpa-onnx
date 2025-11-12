@@ -56,6 +56,7 @@ struct OfflineTtsConfig {
 struct GeneratedAudio {
   std::vector<float> samples;
   int32_t sample_rate;
+  std::vector<int32_t> phoneme_durations;  // w_ceil tensor: sample count per phoneme
 
   // Silence means pause here.
   // If scale > 1, then it increases the duration of a pause

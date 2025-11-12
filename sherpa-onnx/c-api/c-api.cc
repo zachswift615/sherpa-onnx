@@ -1317,6 +1317,17 @@ static const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateInternal(
   ans->n = audio.samples.size();
   ans->sample_rate = audio.sample_rate;
 
+  // Copy phoneme durations if available
+  if (!audio.phoneme_durations.empty()) {
+    int32_t *durations = new int32_t[audio.phoneme_durations.size()];
+    std::copy(audio.phoneme_durations.begin(), audio.phoneme_durations.end(), durations);
+    ans->phoneme_durations = durations;
+    ans->num_phonemes = audio.phoneme_durations.size();
+  } else {
+    ans->phoneme_durations = nullptr;
+    ans->num_phonemes = 0;
+  }
+
   return ans;
 }
 
@@ -1409,6 +1420,7 @@ void SherpaOnnxDestroyOfflineTtsGeneratedAudio(
     const SherpaOnnxGeneratedAudio *p) {
   if (p) {
     delete[] p->samples;
+    delete[] p->phoneme_durations;
     delete p;
   }
 }

@@ -447,16 +447,16 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
                                               x_shape.size());
     }
 
-    Ort::Value audio{nullptr};
+    VitsOutput vits_output{nullptr};
     if (tones.empty()) {
-      audio = model_->Run(std::move(x_tensor), sid, speed);
+      vits_output = model_->Run(std::move(x_tensor), sid, speed);
     } else {
-      audio =
+      vits_output =
           model_->Run(std::move(x_tensor), std::move(tones_tensor), sid, speed);
     }
 
     std::vector<int64_t> audio_shape =
-        audio.GetTensorTypeAndShapeInfo().GetShape();
+        vits_output.audio.GetTensorTypeAndShapeInfo().GetShape();
 
     int64_t total = 1;
     // The output shape may be (1, 1, total) or (1, total) or (total,)
@@ -464,11 +464,30 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
       total *= i;
     }
 
-    const float *p = audio.GetTensorData<float>();
+    const float *p = vits_output.audio.GetTensorData<float>();
 
     GeneratedAudio ans;
     ans.sample_rate = model_->GetMetaData().sample_rate;
     ans.samples = std::vector<float>(p, p + total);
+
+    // Extract phoneme durations (w_ceil tensor) if available
+    if (vits_output.phoneme_durations) {
+      try {
+        auto durations_shape = vits_output.phoneme_durations.GetTensorTypeAndShapeInfo().GetShape();
+        int64_t num_phonemes = durations_shape[0];
+        const int64_t* duration_data = vits_output.phoneme_durations.GetTensorData<int64_t>();
+
+        ans.phoneme_durations.reserve(num_phonemes);
+        for (int64_t i = 0; i < num_phonemes; i++) {
+          // Multiply by 256 to get actual sample counts (per Piper VITS implementation)
+          ans.phoneme_durations.push_back(static_cast<int32_t>(duration_data[i] * 256));
+        }
+      } catch (...) {
+        // If extracting durations fails, leave the vector empty
+        // This ensures backward compatibility with models that don't output durations
+        ans.phoneme_durations.clear();
+      }
+    }
 
     float silence_scale = config_.silence_scale;
     if (silence_scale != 1) {

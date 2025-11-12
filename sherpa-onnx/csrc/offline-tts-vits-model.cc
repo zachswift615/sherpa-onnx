@@ -47,7 +47,7 @@ class OfflineTtsVitsModel::Impl {
     Init(buf.data(), buf.size());
   }
 
-  Ort::Value Run(Ort::Value x, int64_t sid, float speed) {
+  VitsOutput Run(Ort::Value x, int64_t sid, float speed) {
     if (meta_data_.is_piper || meta_data_.is_coqui) {
       return RunVitsPiperOrCoqui(std::move(x), sid, speed);
     }
@@ -55,7 +55,7 @@ class OfflineTtsVitsModel::Impl {
     return RunVits(std::move(x), sid, speed);
   }
 
-  Ort::Value Run(Ort::Value x, Ort::Value tones, int64_t sid, float speed) {
+  VitsOutput Run(Ort::Value x, Ort::Value tones, int64_t sid, float speed) {
     if (meta_data_.num_speakers == 1) {
       // For MeloTTS, we hardcode sid to the one contained in the meta data
       sid = meta_data_.speaker_id;
@@ -112,7 +112,11 @@ class OfflineTtsVitsModel::Impl {
         sess_->Run({}, input_names_ptr_.data(), inputs.data(), inputs.size(),
                    output_names_ptr_.data(), output_names_ptr_.size());
 
-    return std::move(out[0]);
+    // Return both audio and phoneme durations if available
+    if (out.size() > 1) {
+      return VitsOutput(std::move(out[0]), std::move(out[1]));
+    }
+    return VitsOutput(std::move(out[0]));
   }
 
   const OfflineTtsVitsModelMetaData &GetMetaData() const { return meta_data_; }
@@ -211,7 +215,7 @@ class OfflineTtsVitsModel::Impl {
     }
   }
 
-  Ort::Value RunVitsPiperOrCoqui(Ort::Value x, int64_t sid, float speed) {
+  VitsOutput RunVitsPiperOrCoqui(Ort::Value x, int64_t sid, float speed) {
     auto memory_info =
         Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeDefault);
 
@@ -269,10 +273,14 @@ class OfflineTtsVitsModel::Impl {
         sess_->Run({}, input_names_ptr_.data(), inputs.data(), inputs.size(),
                    output_names_ptr_.data(), output_names_ptr_.size());
 
-    return std::move(out[0]);
+    // Return both audio and phoneme durations (w_ceil) if available
+    if (out.size() > 1) {
+      return VitsOutput(std::move(out[0]), std::move(out[1]));
+    }
+    return VitsOutput(std::move(out[0]));
   }
 
-  Ort::Value RunVits(Ort::Value x, int64_t sid, float speed) {
+  VitsOutput RunVits(Ort::Value x, int64_t sid, float speed) {
     auto memory_info =
         Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeDefault);
 
@@ -327,7 +335,11 @@ class OfflineTtsVitsModel::Impl {
         sess_->Run({}, input_names_ptr_.data(), inputs.data(), inputs.size(),
                    output_names_ptr_.data(), output_names_ptr_.size());
 
-    return std::move(out[0]);
+    // Return both audio and phoneme durations if available
+    if (out.size() > 1) {
+      return VitsOutput(std::move(out[0]), std::move(out[1]));
+    }
+    return VitsOutput(std::move(out[0]));
   }
 
  private:
@@ -357,12 +369,12 @@ OfflineTtsVitsModel::OfflineTtsVitsModel(Manager *mgr,
 
 OfflineTtsVitsModel::~OfflineTtsVitsModel() = default;
 
-Ort::Value OfflineTtsVitsModel::Run(Ort::Value x, int64_t sid /*=0*/,
+VitsOutput OfflineTtsVitsModel::Run(Ort::Value x, int64_t sid /*=0*/,
                                     float speed /*= 1.0*/) {
   return impl_->Run(std::move(x), sid, speed);
 }
 
-Ort::Value OfflineTtsVitsModel::Run(Ort::Value x, Ort::Value tones,
+VitsOutput OfflineTtsVitsModel::Run(Ort::Value x, Ort::Value tones,
                                     int64_t sid /*= 0*/,
                                     float speed /*= 1.0*/) const {
   return impl_->Run(std::move(x), std::move(tones), sid, speed);

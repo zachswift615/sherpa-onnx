@@ -14,6 +14,20 @@
 
 namespace sherpa_onnx {
 
+// Output structure containing both audio samples and phoneme durations
+struct VitsOutput {
+  Ort::Value audio;
+  Ort::Value phoneme_durations;  // w_ceil tensor (phoneme sample counts)
+
+  // Constructor for when phoneme durations are available
+  VitsOutput(Ort::Value a, Ort::Value d)
+    : audio(std::move(a)), phoneme_durations(std::move(d)) {}
+
+  // Constructor for when only audio is available (fallback)
+  explicit VitsOutput(Ort::Value a)
+    : audio(std::move(a)), phoneme_durations(Ort::Value{nullptr}) {}
+};
+
 class OfflineTtsVitsModel {
  public:
   ~OfflineTtsVitsModel();
@@ -30,13 +44,12 @@ class OfflineTtsVitsModel {
   //            trained using the VCTK dataset. It is not used for
   //            single-speaker models, e.g., models trained using the ljspeech
   //            dataset.
-   * @return Return a float32 tensor containing audio samples. You can flatten
-   *         it to a 1-D tensor.
+   * @return Return VitsOutput containing audio samples and phoneme durations
    */
-  Ort::Value Run(Ort::Value x, int64_t sid = 0, float speed = 1.0);
+  VitsOutput Run(Ort::Value x, int64_t sid = 0, float speed = 1.0);
 
   // This is for MeloTTS
-  Ort::Value Run(Ort::Value x, Ort::Value tones, int64_t sid = 0,
+  VitsOutput Run(Ort::Value x, Ort::Value tones, int64_t sid = 0,
                  float speed = 1.0) const;
 
   const OfflineTtsVitsModelMetaData &GetMetaData() const;
