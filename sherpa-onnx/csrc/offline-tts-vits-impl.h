@@ -447,13 +447,9 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
                                               x_shape.size());
     }
 
-    VitsOutput vits_output{nullptr};
-    if (tones.empty()) {
-      vits_output = model_->Run(std::move(x_tensor), sid, speed);
-    } else {
-      vits_output =
-          model_->Run(std::move(x_tensor), std::move(tones_tensor), sid, speed);
-    }
+    VitsOutput vits_output = tones.empty()
+        ? model_->Run(std::move(x_tensor), sid, speed)
+        : model_->Run(std::move(x_tensor), std::move(tones_tensor), sid, speed);
 
     std::vector<int64_t> audio_shape =
         vits_output.audio.GetTensorTypeAndShapeInfo().GetShape();

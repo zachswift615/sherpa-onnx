@@ -19,13 +19,16 @@ struct VitsOutput {
   Ort::Value audio;
   Ort::Value phoneme_durations;  // w_ceil tensor (phoneme sample counts)
 
+  // Default constructor
+  VitsOutput() : audio(nullptr), phoneme_durations(nullptr) {}
+
   // Constructor for when phoneme durations are available
   VitsOutput(Ort::Value a, Ort::Value d)
     : audio(std::move(a)), phoneme_durations(std::move(d)) {}
 
   // Constructor for when only audio is available (fallback)
   explicit VitsOutput(Ort::Value a)
-    : audio(std::move(a)), phoneme_durations(Ort::Value{nullptr}) {}
+    : audio(std::move(a)), phoneme_durations(nullptr) {}
 };
 
 class OfflineTtsVitsModel {
