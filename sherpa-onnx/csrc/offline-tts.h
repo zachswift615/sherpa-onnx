@@ -12,6 +12,7 @@
 
 #include "sherpa-onnx/csrc/offline-tts-model-config.h"
 #include "sherpa-onnx/csrc/parse-options.h"
+#include "sherpa-onnx/csrc/phoneme-info.h"
 
 namespace sherpa_onnx {
 
@@ -57,6 +58,9 @@ struct GeneratedAudio {
   std::vector<float> samples;
   int32_t sample_rate;
   std::vector<int32_t> phoneme_durations;  // w_ceil tensor: sample count per phoneme
+
+  // NEW: Phoneme sequence with character positions
+  PhonemeSequence phonemes;
 
   // Silence means pause here.
   // If scale > 1, then it increases the duration of a pause

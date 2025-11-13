@@ -11,6 +11,7 @@
 #include "onnxruntime_cxx_api.h"  // NOLINT
 #include "sherpa-onnx/csrc/offline-tts-model-config.h"
 #include "sherpa-onnx/csrc/offline-tts-vits-model-meta-data.h"
+#include "sherpa-onnx/csrc/phoneme-info.h"
 
 namespace sherpa_onnx {
 
@@ -18,6 +19,7 @@ namespace sherpa_onnx {
 struct VitsOutput {
   Ort::Value audio;
   Ort::Value phoneme_durations;  // w_ceil tensor (phoneme sample counts)
+  PhonemeSequence phonemes;  // NEW: Phoneme sequence with character positions
 
   // Default constructor
   VitsOutput() : audio(nullptr), phoneme_durations(nullptr) {}
