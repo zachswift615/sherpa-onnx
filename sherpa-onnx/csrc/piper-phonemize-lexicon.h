@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "sherpa-onnx/csrc/offline-tts-frontend.h"
+#include "sherpa-onnx/csrc/phoneme-info.h"
 #include "sherpa-onnx/csrc/offline-tts-kitten-model-meta-data.h"
 #include "sherpa-onnx/csrc/offline-tts-kokoro-model-meta-data.h"
 #include "sherpa-onnx/csrc/offline-tts-matcha-model-meta-data.h"

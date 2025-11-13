@@ -26,10 +26,8 @@ function(download_piper_phonemize)
   endforeach()
 
   FetchContent_Declare(piper_phonemize
-    URL
-      ${piper_phonemize_URL}
-      ${piper_phonemize_URL2}
-    URL_HASH          ${piper_phonemize_HASH}
+    GIT_REPOSITORY https://github.com/zachswift615/piper-phonemize.git
+    GIT_TAG feature/espeak-position-tracking
   )
 
   FetchContent_GetProperties(piper_phonemize)

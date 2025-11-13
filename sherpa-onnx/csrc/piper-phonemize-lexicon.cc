@@ -30,6 +30,7 @@
 #include "phonemize.hpp"    // NOLINT
 #include "sherpa-onnx/csrc/file-utils.h"
 #include "sherpa-onnx/csrc/macros.h"
+#include "sherpa-onnx/csrc/phoneme-info.h"
 
 namespace sherpa_onnx {
 
@@ -68,6 +69,49 @@ void CallPhonemizeEspeak(const std::string &text,
 
   // keep multi threads from calling into piper::phonemize_eSpeak
   piper::phonemize_eSpeak(text, config, *phonemes);
+}
+
+void CallPhonemizeEspeakWithPositions(
+    const std::string &text,
+    piper::eSpeakPhonemeConfig &config,  // NOLINT
+    std::vector<std::vector<piper::Phoneme>> *phonemes,
+    std::vector<PhonemeSequence> *phoneme_info) {
+  static std::mutex espeak_mutex;
+
+  std::lock_guard<std::mutex> lock(espeak_mutex);
+
+  // Vector to capture PhonemePosition data from piper
+  std::vector<std::vector<piper::PhonemePosition>> positions;
+
+  // Call the new piper API with position tracking
+  piper::phonemize_eSpeak_with_positions(text, config, *phonemes, positions);
+
+  // Convert piper::PhonemePosition to sherpa_onnx::PhonemeInfo
+  phoneme_info->clear();
+  phoneme_info->reserve(phonemes->size());
+
+  for (size_t i = 0; i < phonemes->size(); ++i) {
+    PhonemeSequence sequence;
+    const auto &sentence_phonemes = (*phonemes)[i];
+    const auto &sentence_positions = positions[i];
+
+    sequence.reserve(sentence_phonemes.size());
+
+    for (size_t j = 0; j < sentence_phonemes.size(); ++j) {
+      // Convert char32_t phoneme to UTF-8 string
+      std::string phoneme_str = ToString(sentence_phonemes[j]);
+
+      // Create PhonemeInfo from PhonemePosition
+      PhonemeInfo info(
+          phoneme_str,
+          sentence_positions[j].text_position,
+          sentence_positions[j].length);
+
+      sequence.push_back(info);
+    }
+
+    phoneme_info->push_back(std::move(sequence));
+  }
 }
 
 static std::unordered_map<char32_t, int32_t> ReadTokens(std::istream &is) {
