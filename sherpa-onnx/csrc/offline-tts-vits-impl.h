@@ -215,6 +215,13 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
       return {};
     }
 
+    // Capture phoneme sequences from the frontend if it's a PiperPhonemizeLexicon
+    std::vector<PhonemeSequence> phoneme_sequences;
+    auto* piper_frontend = dynamic_cast<PiperPhonemizeLexicon*>(frontend_.get());
+    if (piper_frontend) {
+      phoneme_sequences = piper_frontend->GetLastPhonemeSequences();
+    }
+
     std::vector<std::vector<int64_t>> x;
     std::vector<std::vector<int64_t>> tones;
 
@@ -247,6 +254,13 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
 
     if (config_.max_num_sentences <= 0 || x_size <= config_.max_num_sentences) {
       auto ans = Process(x, tones, sid, speed);
+      // Attach phoneme sequences if available
+      if (!phoneme_sequences.empty()) {
+        // Flatten all sequences into a single phoneme list
+        for (const auto& seq : phoneme_sequences) {
+          ans.phonemes.insert(ans.phonemes.end(), seq.begin(), seq.end());
+        }
+      }
       if (callback) {
         callback(ans.samples.data(), ans.samples.size(), 1.0);
       }
@@ -328,6 +342,14 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
         // Caution(fangjun): audio is freed when the callback returns, so users
         // should copy the data if they want to access the data after
         // the callback returns to avoid segmentation fault.
+      }
+    }
+
+    // Attach phoneme sequences if available (for batched case)
+    if (!phoneme_sequences.empty()) {
+      // Flatten all sequences into a single phoneme list
+      for (const auto& seq : phoneme_sequences) {
+        ans.phonemes.insert(ans.phonemes.end(), seq.begin(), seq.end());
       }
     }
 

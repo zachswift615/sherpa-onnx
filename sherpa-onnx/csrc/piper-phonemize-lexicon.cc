@@ -494,10 +494,10 @@ std::vector<TokenIDs> PiperPhonemizeLexicon::ConvertTextToTokenIds(
     return ConvertTextToTokenIdsMatcha(text, voice);
   } else if (is_kokoro_) {
     return ConvertTextToTokenIdsKokoroOrKitten(
-        token2id_, kokoro_meta_data_.max_token_len, text, voice);
+        token2id_, kokoro_meta_data_.max_token_len, text, voice, &last_phoneme_sequences_);
   } else if (is_kitten_) {
     return ConvertTextToTokenIdsKokoroOrKitten(
-        token2id_, kitten_meta_data_.max_token_len, text, voice);
+        token2id_, kitten_meta_data_.max_token_len, text, voice, &last_phoneme_sequences_);
   } else {
     return ConvertTextToTokenIdsVits(text, voice);
   }
@@ -512,8 +512,12 @@ std::vector<TokenIDs> PiperPhonemizeLexicon::ConvertTextToTokenIdsMatcha(
   config.voice = voice;  // e.g., voice is en-us
 
   std::vector<std::vector<piper::Phoneme>> phonemes;
+  std::vector<PhonemeSequence> phoneme_info;
 
-  CallPhonemizeEspeak(text, config, &phonemes);
+  CallPhonemizeEspeakWithPositions(text, config, &phonemes, &phoneme_info);
+
+  // Store the phoneme sequences for later use
+  last_phoneme_sequences_ = phoneme_info;
 
   std::vector<TokenIDs> ans;
 
@@ -532,7 +536,8 @@ std::vector<TokenIDs> PiperPhonemizeLexicon::ConvertTextToTokenIdsMatcha(
 std::vector<TokenIDs> ConvertTextToTokenIdsKokoroOrKitten(
     const std::unordered_map<char32_t, int32_t> &token2id,
     int32_t max_token_len, const std::string &text,
-    const std::string &voice /*= ""*/) {
+    const std::string &voice /*= ""*/,
+    std::vector<PhonemeSequence> *phoneme_info /*= nullptr*/) {
   piper::eSpeakPhonemeConfig config;
 
   // ./bin/espeak-ng-bin --path  ./install/share/espeak-ng-data/ --voices
@@ -541,7 +546,11 @@ std::vector<TokenIDs> ConvertTextToTokenIdsKokoroOrKitten(
 
   std::vector<std::vector<piper::Phoneme>> phonemes;
 
-  CallPhonemizeEspeak(text, config, &phonemes);
+  if (phoneme_info) {
+    CallPhonemizeEspeakWithPositions(text, config, &phonemes, phoneme_info);
+  } else {
+    CallPhonemizeEspeak(text, config, &phonemes);
+  }
 
   std::vector<TokenIDs> ans;
 
@@ -566,8 +575,12 @@ std::vector<TokenIDs> PiperPhonemizeLexicon::ConvertTextToTokenIdsVits(
   config.voice = voice;  // e.g., voice is en-us
 
   std::vector<std::vector<piper::Phoneme>> phonemes;
+  std::vector<PhonemeSequence> phoneme_info;
 
-  CallPhonemizeEspeak(text, config, &phonemes);
+  CallPhonemizeEspeakWithPositions(text, config, &phonemes, &phoneme_info);
+
+  // Store the phoneme sequences for later use
+  last_phoneme_sequences_ = phoneme_info;
 
   std::vector<TokenIDs> ans;
 

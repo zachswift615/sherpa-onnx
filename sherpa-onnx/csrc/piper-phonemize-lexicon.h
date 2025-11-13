@@ -55,6 +55,11 @@ class PiperPhonemizeLexicon : public OfflineTtsFrontend {
   std::vector<TokenIDs> ConvertTextToTokenIds(
       const std::string &text, const std::string &voice = "") const override;
 
+  // Get the last phoneme sequences captured during ConvertTextToTokenIds
+  const std::vector<PhonemeSequence>& GetLastPhonemeSequences() const {
+    return last_phoneme_sequences_;
+  }
+
  private:
   std::vector<TokenIDs> ConvertTextToTokenIdsVits(
       const std::string &text, const std::string &voice = "") const;
@@ -72,6 +77,9 @@ class PiperPhonemizeLexicon : public OfflineTtsFrontend {
   bool is_matcha_ = false;
   bool is_kokoro_ = false;
   bool is_kitten_ = false;
+
+  // Store the last phoneme sequences captured during ConvertTextToTokenIds
+  mutable std::vector<PhonemeSequence> last_phoneme_sequences_;
 };
 
 }  // namespace sherpa_onnx

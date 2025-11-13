@@ -58,11 +58,16 @@ class OfflineTtsFrontend {
 // implementation is in ./piper-phonemize-lexicon.cc
 void InitEspeak(const std::string &data_dir);
 
+// Forward declaration from phoneme-info.h
+class PhonemeInfo;
+using PhonemeSequence = std::vector<PhonemeInfo>;
+
 // implementation in ./piper-phonemize-lexicon.cc
 std::vector<TokenIDs> ConvertTextToTokenIdsKokoroOrKitten(
     const std::unordered_map<char32_t, int32_t> &token2id,
     int32_t max_token_len, const std::string &text,
-    const std::string &voice = "");
+    const std::string &voice = "",
+    std::vector<PhonemeSequence> *phoneme_info = nullptr);
 
 }  // namespace sherpa_onnx
 
