@@ -1304,6 +1304,10 @@ static const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateInternal(
   sherpa_onnx::GeneratedAudio audio =
       tts->impl->Generate(text, sid, speed, callback);
 
+  // DIAGNOSTIC: Check what Generate returned
+  fprintf(stderr, "[SHERPA_C_API] GeneratedAudio: samples=%zu, phoneme_durations=%zu, phonemes=%zu\n",
+          audio.samples.size(), audio.phoneme_durations.size(), audio.phonemes.size());
+
   if (audio.samples.empty()) {
     return nullptr;
   }
@@ -1330,6 +1334,10 @@ static const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateInternal(
 
   // Copy phoneme sequence data if available
   if (!audio.phonemes.empty()) {
+    // DIAGNOSTIC: Log phoneme data copy
+    fprintf(stderr, "[SHERPA_C_API] Copying %zu phonemes to C API struct\n",
+            audio.phonemes.size());
+
     // Allocate arrays for phoneme data
     const char **symbols = new const char*[audio.phonemes.size()];
     int32_t *char_starts = new int32_t[audio.phonemes.size()];
@@ -1345,7 +1353,14 @@ static const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateInternal(
     ans->phoneme_symbols = symbols;
     ans->phoneme_char_start = char_starts;
     ans->phoneme_char_length = char_lengths;
+
+    // DIAGNOSTIC: Verify copy
+    fprintf(stderr, "[SHERPA_C_API] Phoneme data copied: symbols=%p, char_start=%p, char_length=%p\n",
+            (void*)ans->phoneme_symbols, (void*)ans->phoneme_char_start, (void*)ans->phoneme_char_length);
   } else {
+    // DIAGNOSTIC: No phoneme data
+    fprintf(stderr, "[SHERPA_C_API] WARNING: audio.phonemes is empty!\n");
+
     ans->phoneme_symbols = nullptr;
     ans->phoneme_char_start = nullptr;
     ans->phoneme_char_length = nullptr;

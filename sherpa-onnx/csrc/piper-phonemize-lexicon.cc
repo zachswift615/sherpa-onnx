@@ -86,6 +86,10 @@ void CallPhonemizeEspeakWithPositions(
   // Call the new piper API with position tracking
   piper::phonemize_eSpeak_with_positions(text, config, *phonemes, positions);
 
+  // DIAGNOSTIC: Check what piper returned
+  fprintf(stderr, "[SHERPA_DEBUG] After piper call: phonemes.size()=%zu, positions.size()=%zu\n",
+          phonemes->size(), positions.size());
+
   // Convert piper::PhonemePosition to sherpa_onnx::PhonemeInfo
   phoneme_info->clear();
   phoneme_info->reserve(phonemes->size());
@@ -93,7 +97,20 @@ void CallPhonemizeEspeakWithPositions(
   for (size_t i = 0; i < phonemes->size(); ++i) {
     PhonemeSequence sequence;
     const auto &sentence_phonemes = (*phonemes)[i];
+
+    // DIAGNOSTIC: Check positions array bounds
+    if (i >= positions.size()) {
+      fprintf(stderr, "[SHERPA_DEBUG] ERROR: positions[%zu] out of bounds (positions.size=%zu)\n",
+              i, positions.size());
+      phoneme_info->push_back(std::move(sequence));
+      continue;
+    }
+
     const auto &sentence_positions = positions[i];
+
+    // DIAGNOSTIC: Log sizes for this sentence
+    fprintf(stderr, "[SHERPA_DEBUG] Sentence %zu: phonemes=%zu, positions=%zu\n",
+            i, sentence_phonemes.size(), sentence_positions.size());
 
     sequence.reserve(sentence_phonemes.size());
 
@@ -112,6 +129,10 @@ void CallPhonemizeEspeakWithPositions(
 
     phoneme_info->push_back(std::move(sequence));
   }
+
+  // DIAGNOSTIC: Final count
+  fprintf(stderr, "[SHERPA_DEBUG] Converted %zu phoneme sequences with position data\n",
+          phoneme_info->size());
 }
 
 static std::unordered_map<char32_t, int32_t> ReadTokens(std::istream &is) {
