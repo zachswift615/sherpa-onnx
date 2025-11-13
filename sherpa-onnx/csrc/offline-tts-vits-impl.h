@@ -215,13 +215,6 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
       return {};
     }
 
-    // NEW: Extract phoneme sequence with positions (if frontend supports it)
-    PhonemeSequence phoneme_sequence;
-    auto *piper_frontend = dynamic_cast<PiperPhonemizeLexicon*>(frontend_.get());
-    if (piper_frontend != nullptr) {
-      phoneme_sequence = piper_frontend->ExtractPhonemeSequence(text, meta_data.voice);
-    }
-
     std::vector<std::vector<int64_t>> x;
     std::vector<std::vector<int64_t>> tones;
 
@@ -253,7 +246,7 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
     int32_t x_size = static_cast<int32_t>(x.size());
 
     if (config_.max_num_sentences <= 0 || x_size <= config_.max_num_sentences) {
-      auto ans = Process(x, tones, sid, speed, phoneme_sequence);
+      auto ans = Process(x, tones, sid, speed);
       if (callback) {
         callback(ans.samples.data(), ans.samples.size(), 1.0);
       }
@@ -420,8 +413,7 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
 
   GeneratedAudio Process(const std::vector<std::vector<int64_t>> &tokens,
                          const std::vector<std::vector<int64_t>> &tones,
-                         int32_t sid, float speed,
-                         const PhonemeSequence &phoneme_sequence = PhonemeSequence()) const {
+                         int32_t sid, float speed) const {
     int32_t num_tokens = 0;
     for (const auto &k : tokens) {
       num_tokens += k.size();
@@ -490,22 +482,6 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
         // If extracting durations fails, leave the vector empty
         // This ensures backward compatibility with models that don't output durations
         ans.phoneme_durations.clear();
-      }
-    }
-
-    // NEW: Attach phoneme sequence to output
-    ans.phonemes = phoneme_sequence;
-
-    // Verify phoneme count matches w_ceil tensor length (critical assertion)
-    if (!ans.phonemes.empty() && !ans.phoneme_durations.empty()) {
-      if (ans.phonemes.size() != ans.phoneme_durations.size()) {
-        SHERPA_ONNX_LOGE(
-            "Phoneme sequence size (%d) does not match w_ceil tensor size (%d). "
-            "This indicates a mismatch between phonemization and VITS model output.",
-            static_cast<int32_t>(ans.phonemes.size()),
-            static_cast<int32_t>(ans.phoneme_durations.size()));
-        // Don't fail hard - just clear phoneme data to avoid undefined behavior
-        ans.phonemes.clear();
       }
     }
 
