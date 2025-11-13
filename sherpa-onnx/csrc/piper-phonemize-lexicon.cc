@@ -70,6 +70,20 @@ void CallPhonemizeEspeak(const std::string &text,
   piper::phonemize_eSpeak(text, config, *phonemes);
 }
 
+// NEW: Call phonemize_eSpeak_with_positions to get phoneme sequences with character positions
+void CallPhonemizeEspeakWithPositions(
+    const std::string &text,
+    piper::eSpeakPhonemeConfig &config,  // NOLINT
+    std::vector<std::vector<piper::Phoneme>> *phonemes,
+    std::vector<std::vector<piper::PhonemePosition>> *positions) {
+  static std::mutex espeak_mutex;
+
+  std::lock_guard<std::mutex> lock(espeak_mutex);
+
+  // keep multi threads from calling into piper::phonemize_eSpeak_with_positions
+  piper::phonemize_eSpeak_with_positions(text, config, *phonemes, *positions);
+}
+
 static std::unordered_map<char32_t, int32_t> ReadTokens(std::istream &is) {
   std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;
   std::unordered_map<char32_t, int32_t> token2id;
@@ -550,6 +564,47 @@ std::vector<TokenIDs> PiperPhonemizeLexicon::ConvertTextToTokenIdsVits(
   }
 
   return ans;
+}
+
+// NEW: Convert text to token IDs and extract phoneme sequence with positions
+// This is a helper that captures phoneme symbols and their character positions
+PhonemeSequence PiperPhonemizeLexicon::ExtractPhonemeSequence(
+    const std::string &text, const std::string &voice /*= ""*/) const {
+  piper::eSpeakPhonemeConfig config;
+  config.voice = voice;
+
+  std::vector<std::vector<piper::Phoneme>> phonemes;
+  std::vector<std::vector<piper::PhonemePosition>> positions;
+
+  // Call the new position-tracking phonemization
+  CallPhonemizeEspeakWithPositions(text, config, &phonemes, &positions);
+
+  PhonemeSequence result;
+
+  // Flatten all sentences into a single phoneme sequence
+  // Note: positions should match phonemes size
+  for (size_t sent_idx = 0; sent_idx < phonemes.size(); ++sent_idx) {
+    const auto &sent_phonemes = phonemes[sent_idx];
+    const auto &sent_positions = positions[sent_idx];
+
+    for (size_t i = 0; i < sent_phonemes.size(); ++i) {
+      piper::Phoneme phoneme = sent_phonemes[i];
+
+      // Convert char32_t phoneme to UTF-8 string
+      std::string symbol = ToString(phoneme);
+
+      // Get position information (if available)
+      int32_t char_start = (i < sent_positions.size()) ? sent_positions[i].text_position : -1;
+      int32_t char_length = (i < sent_positions.size()) ? sent_positions[i].length : 0;
+
+      // Skip phonemes with invalid positions (like punctuation markers)
+      if (char_start >= 0) {
+        result.emplace_back(symbol, char_start, char_length);
+      }
+    }
+  }
+
+  return result;
 }
 
 #if __ANDROID_API__ >= 9

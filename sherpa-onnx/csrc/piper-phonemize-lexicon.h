@@ -14,6 +14,7 @@
 #include "sherpa-onnx/csrc/offline-tts-kokoro-model-meta-data.h"
 #include "sherpa-onnx/csrc/offline-tts-matcha-model-meta-data.h"
 #include "sherpa-onnx/csrc/offline-tts-vits-model-meta-data.h"
+#include "sherpa-onnx/csrc/phoneme-info.h"
 
 namespace sherpa_onnx {
 
@@ -53,6 +54,11 @@ class PiperPhonemizeLexicon : public OfflineTtsFrontend {
 
   std::vector<TokenIDs> ConvertTextToTokenIds(
       const std::string &text, const std::string &voice = "") const override;
+
+  // NEW: Extract phoneme sequence with character positions
+  // This should be called with the same text that was passed to ConvertTextToTokenIds
+  PhonemeSequence ExtractPhonemeSequence(
+      const std::string &text, const std::string &voice = "") const;
 
  private:
   std::vector<TokenIDs> ConvertTextToTokenIdsVits(
