@@ -1356,9 +1356,19 @@ static const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateInternal(
     ans->phoneme_char_start = char_starts;
     ans->phoneme_char_length = char_lengths;
 
-    // DIAGNOSTIC: Verify copy
+    // DIAGNOSTIC: Verify copy and show first 5 values
     fprintf(stderr, "[SHERPA_C_API] Phoneme data copied: symbols=%p, char_start=%p, char_length=%p\n",
             (void*)ans->phoneme_symbols, (void*)ans->phoneme_char_start, (void*)ans->phoneme_char_length);
+
+    // DIAGNOSTIC: Log first 5 phonemes' position data
+    size_t sample_count = audio.phonemes.size() < 5 ? audio.phonemes.size() : 5;
+    fprintf(stderr, "[SHERPA_C_API] First %zu phonemes' position data:\n", sample_count);
+    for (size_t i = 0; i < sample_count; ++i) {
+      fprintf(stderr, "  [%zu]: symbol='%s', char_start=%d, char_length=%d -> [%d..<%d]\n",
+              i, audio.phonemes[i].symbol.c_str(),
+              audio.phonemes[i].char_start, audio.phonemes[i].char_length,
+              audio.phonemes[i].char_start, audio.phonemes[i].char_start + audio.phonemes[i].char_length);
+    }
   } else {
     // DIAGNOSTIC: No phoneme data
     fprintf(stderr, "[SHERPA_C_API] WARNING: audio.phonemes is empty!\n");
@@ -1481,6 +1491,16 @@ const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateWithZipvoice(
     ans->phoneme_symbols = symbols;
     ans->phoneme_char_start = char_starts;
     ans->phoneme_char_length = char_lengths;
+
+    // DIAGNOSTIC: Log first 5 phonemes' position data
+    size_t sample_count = out.phonemes.size() < 5 ? out.phonemes.size() : 5;
+    fprintf(stderr, "[SHERPA_C_API] First %zu phonemes' position data:\n", sample_count);
+    for (size_t i = 0; i < sample_count; ++i) {
+      fprintf(stderr, "  [%zu]: symbol='%s', char_start=%d, char_length=%d -> [%d..<%d]\n",
+              i, out.phonemes[i].symbol.c_str(),
+              out.phonemes[i].char_start, out.phonemes[i].char_length,
+              out.phonemes[i].char_start, out.phonemes[i].char_start + out.phonemes[i].char_length);
+    }
   } else {
     ans->phoneme_symbols = nullptr;
     ans->phoneme_char_start = nullptr;
