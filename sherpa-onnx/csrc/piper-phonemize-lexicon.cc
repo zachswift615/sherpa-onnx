@@ -361,7 +361,8 @@ void InitEspeak(const std::string &data_dir) {
 #endif
 
     int32_t result =
-        espeak_Initialize(AUDIO_OUTPUT_SYNCHRONOUS, 0, data_dir.c_str(), 0);
+        espeak_Initialize(AUDIO_OUTPUT_SYNCHRONOUS, 0, data_dir.c_str(),
+                          espeakINITIALIZE_PHONEME_EVENTS);
     if (result != 22050) {
       SHERPA_ONNX_LOGE(
           "Failed to initialize espeak-ng with data dir: %s. Return code is: "

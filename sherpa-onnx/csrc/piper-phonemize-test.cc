@@ -48,7 +48,8 @@ TEST(PiperPhonemize, Case1) {
     return;
   }
   int32_t result =
-      espeak_Initialize(AUDIO_OUTPUT_SYNCHRONOUS, 0, data_dir.c_str(), 0);
+      espeak_Initialize(AUDIO_OUTPUT_SYNCHRONOUS, 0, data_dir.c_str(),
+                        espeakINITIALIZE_PHONEME_EVENTS);
   EXPECT_EQ(result, 22050);
 
   piper::eSpeakPhonemeConfig config;
