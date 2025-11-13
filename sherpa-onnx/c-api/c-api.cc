@@ -1328,6 +1328,29 @@ static const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateInternal(
     ans->num_phonemes = 0;
   }
 
+  // Copy phoneme sequence data if available
+  if (!audio.phonemes.empty()) {
+    // Allocate arrays for phoneme data
+    const char **symbols = new const char*[audio.phonemes.size()];
+    int32_t *char_starts = new int32_t[audio.phonemes.size()];
+    int32_t *char_lengths = new int32_t[audio.phonemes.size()];
+
+    for (size_t i = 0; i < audio.phonemes.size(); ++i) {
+      // Use strdup to allocate C string
+      symbols[i] = strdup(audio.phonemes[i].symbol.c_str());
+      char_starts[i] = audio.phonemes[i].char_start;
+      char_lengths[i] = audio.phonemes[i].char_length;
+    }
+
+    ans->phoneme_symbols = symbols;
+    ans->phoneme_char_start = char_starts;
+    ans->phoneme_char_length = char_lengths;
+  } else {
+    ans->phoneme_symbols = nullptr;
+    ans->phoneme_char_start = nullptr;
+    ans->phoneme_char_length = nullptr;
+  }
+
   return ans;
 }
 
@@ -1413,6 +1436,38 @@ const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateWithZipvoice(
     ans->samples = nullptr;
   }
 
+  // Copy phoneme durations if available
+  if (!out.phoneme_durations.empty()) {
+    int32_t *durations = new int32_t[out.phoneme_durations.size()];
+    std::copy(out.phoneme_durations.begin(), out.phoneme_durations.end(), durations);
+    ans->phoneme_durations = durations;
+    ans->num_phonemes = out.phoneme_durations.size();
+  } else {
+    ans->phoneme_durations = nullptr;
+    ans->num_phonemes = 0;
+  }
+
+  // Copy phoneme sequence data if available
+  if (!out.phonemes.empty()) {
+    const char **symbols = new const char*[out.phonemes.size()];
+    int32_t *char_starts = new int32_t[out.phonemes.size()];
+    int32_t *char_lengths = new int32_t[out.phonemes.size()];
+
+    for (size_t i = 0; i < out.phonemes.size(); ++i) {
+      symbols[i] = strdup(out.phonemes[i].symbol.c_str());
+      char_starts[i] = out.phonemes[i].char_start;
+      char_lengths[i] = out.phonemes[i].char_length;
+    }
+
+    ans->phoneme_symbols = symbols;
+    ans->phoneme_char_start = char_starts;
+    ans->phoneme_char_length = char_lengths;
+  } else {
+    ans->phoneme_symbols = nullptr;
+    ans->phoneme_char_start = nullptr;
+    ans->phoneme_char_length = nullptr;
+  }
+
   return ans;
 }
 
@@ -1421,6 +1476,17 @@ void SherpaOnnxDestroyOfflineTtsGeneratedAudio(
   if (p) {
     delete[] p->samples;
     delete[] p->phoneme_durations;
+
+    // Free phoneme sequence data
+    if (p->phoneme_symbols) {
+      for (int32_t i = 0; i < p->num_phonemes; ++i) {
+        free((void*)p->phoneme_symbols[i]);  // Free strdup'd strings
+      }
+      delete[] p->phoneme_symbols;
+    }
+    delete[] p->phoneme_char_start;
+    delete[] p->phoneme_char_length;
+
     delete p;
   }
 }
