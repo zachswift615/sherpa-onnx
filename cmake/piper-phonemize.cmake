@@ -8,7 +8,11 @@ function(download_piper_phonemize)
   )
 
   message(STATUS "Downloading piper-phonemize from https://github.com/zachswift615/piper-phonemize.git (branch: feature/espeak-position-tracking)")
-  FetchContent_MakeAvailable(piper_phonemize)
+
+  FetchContent_GetProperties(piper_phonemize)
+  if(NOT piper_phonemize_POPULATED)
+    FetchContent_Populate(piper_phonemize)
+  endif()
 
   message(STATUS "piper-phonemize is downloaded to ${piper_phonemize_SOURCE_DIR}")
   message(STATUS "piper-phonemize binary dir is ${piper_phonemize_BINARY_DIR}")
