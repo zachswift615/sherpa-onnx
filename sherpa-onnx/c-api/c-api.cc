@@ -1321,15 +1321,17 @@ static const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateInternal(
   ans->n = audio.samples.size();
   ans->sample_rate = audio.sample_rate;
 
+  // Set num_phonemes based on actual phoneme data, not durations
+  // (durations may be empty while we still have position data)
+  ans->num_phonemes = audio.phonemes.size();
+
   // Copy phoneme durations if available
   if (!audio.phoneme_durations.empty()) {
     int32_t *durations = new int32_t[audio.phoneme_durations.size()];
     std::copy(audio.phoneme_durations.begin(), audio.phoneme_durations.end(), durations);
     ans->phoneme_durations = durations;
-    ans->num_phonemes = audio.phoneme_durations.size();
   } else {
     ans->phoneme_durations = nullptr;
-    ans->num_phonemes = 0;
   }
 
   // Copy phoneme sequence data if available
@@ -1451,15 +1453,17 @@ const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateWithZipvoice(
     ans->samples = nullptr;
   }
 
+  // Set num_phonemes based on actual phoneme data, not durations
+  // (durations may be empty while we still have position data)
+  ans->num_phonemes = out.phonemes.size();
+
   // Copy phoneme durations if available
   if (!out.phoneme_durations.empty()) {
     int32_t *durations = new int32_t[out.phoneme_durations.size()];
     std::copy(out.phoneme_durations.begin(), out.phoneme_durations.end(), durations);
     ans->phoneme_durations = durations;
-    ans->num_phonemes = out.phoneme_durations.size();
   } else {
     ans->phoneme_durations = nullptr;
-    ans->num_phonemes = 0;
   }
 
   // Copy phoneme sequence data if available
