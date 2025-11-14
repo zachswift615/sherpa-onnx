@@ -1380,9 +1380,7 @@ static const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateInternal(
 
   // NEW: Copy normalized text
   if (!audio.normalized_text.empty()) {
-    char* normalized = new char[audio.normalized_text.length() + 1];
-    std::strcpy(normalized, audio.normalized_text.c_str());
-    ans->normalized_text = normalized;
+    ans->normalized_text = strdup(audio.normalized_text.c_str());
   } else {
     ans->normalized_text = nullptr;
   }
@@ -1532,9 +1530,7 @@ const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateWithZipvoice(
 
   // NEW: Copy normalized text
   if (!out.normalized_text.empty()) {
-    char* normalized = new char[out.normalized_text.length() + 1];
-    std::strcpy(normalized, out.normalized_text.c_str());
-    ans->normalized_text = normalized;
+    ans->normalized_text = strdup(out.normalized_text.c_str());
   } else {
     ans->normalized_text = nullptr;
   }
@@ -1573,7 +1569,9 @@ void SherpaOnnxDestroyOfflineTtsGeneratedAudio(
     delete[] p->phoneme_char_length;
 
     // NEW: Free normalized text and character mapping
-    delete[] p->normalized_text;
+    if (p->normalized_text) {
+      free((void*)p->normalized_text);
+    }
     delete[] p->char_mapping;
 
     delete p;
