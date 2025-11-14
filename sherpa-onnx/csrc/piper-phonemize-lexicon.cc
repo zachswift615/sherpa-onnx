@@ -146,21 +146,44 @@ void CallPhonemizeEspeakWithNormalized(
 
   std::lock_guard<std::mutex> lock(espeak_mutex);
 
-  // NOTE: For now, we just use the existing position API
-  // TODO: Once piper-phonemize is updated with PhonemeResult struct and
-  // phonemize_eSpeak_with_normalized function, we can use that instead
+  // Use the new phonemize_eSpeak_with_normalized function from piper-phonemize
+  piper::PhonemeResult result;
+  piper::phonemize_eSpeak_with_normalized(text, config, result);
 
-  std::vector<std::vector<piper::PhonemePosition>> positions;
-  piper::phonemize_eSpeak_with_positions(text, config, *phonemes, positions);
+  // Copy phonemes output
+  if (phonemes) {
+    *phonemes = result.phonemes;
+  }
 
-  // Convert piper::PhonemePosition to sherpa_onnx::PhonemeInfo
+  // Copy normalized text
+  if (normalized_text) {
+    *normalized_text = result.normalized_text;
+  }
+
+  // Copy char mapping (converting from std::pair<int, int> to std::pair<int32_t, int32_t>)
+  if (char_mapping) {
+    char_mapping->clear();
+    char_mapping->reserve(result.char_mapping.size());
+    for (const auto &pair : result.char_mapping) {
+      char_mapping->push_back(std::make_pair(
+          static_cast<int32_t>(pair.first),
+          static_cast<int32_t>(pair.second)));
+    }
+  }
+
+  // Get positions using the existing position API for phoneme_info
+  // (since PhonemeResult doesn't include position data yet)
   if (phoneme_info) {
     phoneme_info->clear();
-    phoneme_info->reserve(phonemes->size());
+    std::vector<std::vector<piper::PhonemePosition>> positions;
+    std::vector<std::vector<piper::Phoneme>> temp_phonemes;
+    piper::phonemize_eSpeak_with_positions(text, config, temp_phonemes, positions);
 
-    for (size_t i = 0; i < phonemes->size() && i < positions.size(); ++i) {
+    phoneme_info->reserve(temp_phonemes.size());
+
+    for (size_t i = 0; i < temp_phonemes.size() && i < positions.size(); ++i) {
       PhonemeSequence sequence;
-      const auto &sentence_phonemes = (*phonemes)[i];
+      const auto &sentence_phonemes = temp_phonemes[i];
       const auto &sentence_positions = positions[i];
 
       sequence.reserve(sentence_phonemes.size());
@@ -180,16 +203,6 @@ void CallPhonemizeEspeakWithNormalized(
 
       phoneme_info->push_back(std::move(sequence));
     }
-  }
-
-  // For now, we leave normalized_text and char_mapping empty
-  // TODO: These will be populated once piper-phonemize is updated with the
-  // phonemize_eSpeak_with_normalized function (Task 3 of the plan)
-  if (normalized_text) {
-    normalized_text->clear();
-  }
-  if (char_mapping) {
-    char_mapping->clear();
   }
 }
 

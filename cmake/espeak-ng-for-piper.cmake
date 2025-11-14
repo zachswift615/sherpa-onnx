@@ -1,9 +1,10 @@
 function(download_espeak_ng_for_piper)
   include(FetchContent)
 
-  set(espeak_ng_URL  "https://github.com/csukuangfj/espeak-ng/archive/f6fed6c58b5e0998b8e68c6610125e2d07d595a7.zip")
-  set(espeak_ng_URL2 "https://hf-mirror.com/csukuangfj/sherpa-onnx-cmake-deps/resolve/main/espeak-ng-f6fed6c58b5e0998b8e68c6610125e2d07d595a7.zip")
-  set(espeak_ng_HASH "SHA256=70cbf4050e7a014aae19140b05e57249da4720f56128459fbe3a93beaf971ae6")
+  # Use local espeak-ng fork with normalized text support
+  # Instead of fetching from URL, use the local directory with our modifications
+  set(espeak_ng_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../espeak-ng")
+  set(espeak_ng_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/espeak-ng-build")
 
   set(BUILD_ESPEAK_NG_TESTS OFF CACHE BOOL "" FORCE)
   set(USE_ASYNC OFF CACHE BOOL "" FORCE)
@@ -18,39 +19,7 @@ function(download_espeak_ng_for_piper)
     set(BUILD_ESPEAK_NG_EXE OFF CACHE BOOL "" FORCE)
   endif()
 
-  # If you don't have access to the Internet,
-  # please pre-download kaldi-decoder
-  set(possible_file_locations
-    $ENV{HOME}/Downloads/espeak-ng-f6fed6c58b5e0998b8e68c6610125e2d07d595a7.zip
-    ${CMAKE_SOURCE_DIR}/espeak-ng-f6fed6c58b5e0998b8e68c6610125e2d07d595a7.zip
-    ${CMAKE_BINARY_DIR}/espeak-ng-f6fed6c58b5e0998b8e68c6610125e2d07d595a7.zip
-    /tmp/espeak-ng-f6fed6c58b5e0998b8e68c6610125e2d07d595a7.zip
-    /star-fj/fangjun/download/github/espeak-ng-f6fed6c58b5e0998b8e68c6610125e2d07d595a7.zip
-  )
-
-  foreach(f IN LISTS possible_file_locations)
-    if(EXISTS ${f})
-      set(espeak_ng_URL  "${f}")
-      file(TO_CMAKE_PATH "${espeak_ng_URL}" espeak_ng_URL)
-      message(STATUS "Found local downloaded espeak-ng: ${espeak_ng_URL}")
-      set(espeak_ng_URL2 )
-      break()
-    endif()
-  endforeach()
-
-  FetchContent_Declare(espeak_ng
-    URL
-      ${espeak_ng_URL}
-      ${espeak_ng_URL2}
-    URL_HASH          ${espeak_ng_HASH}
-  )
-
-  FetchContent_GetProperties(espeak_ng)
-  if(NOT espeak_ng_POPULATED)
-    message(STATUS "Downloading espeak-ng from ${espeak_ng_URL}")
-    FetchContent_Populate(espeak_ng)
-  endif()
-  message(STATUS "espeak-ng is downloaded to ${espeak_ng_SOURCE_DIR}")
+  message(STATUS "Using local espeak-ng from ${espeak_ng_SOURCE_DIR}")
   message(STATUS "espeak-ng binary dir is ${espeak_ng_BINARY_DIR}")
 
   if(BUILD_SHARED_LIBS)

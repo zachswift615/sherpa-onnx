@@ -1,20 +1,12 @@
 function(download_piper_phonemize)
   include(FetchContent)
 
-  # Use forked piper-phonemize with position tracking support
-  FetchContent_Declare(piper_phonemize
-    GIT_REPOSITORY https://github.com/zachswift615/piper-phonemize.git
-    GIT_TAG feature/espeak-position-tracking
-  )
+  # Use local piper-phonemize with normalized text support
+  # Instead of fetching from git, use the local directory with our modifications
+  set(piper_phonemize_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../piper-phonemize")
+  set(piper_phonemize_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/piper-phonemize-build")
 
-  message(STATUS "Downloading piper-phonemize from https://github.com/zachswift615/piper-phonemize.git (branch: feature/espeak-position-tracking)")
-
-  FetchContent_GetProperties(piper_phonemize)
-  if(NOT piper_phonemize_POPULATED)
-    FetchContent_Populate(piper_phonemize)
-  endif()
-
-  message(STATUS "piper-phonemize is downloaded to ${piper_phonemize_SOURCE_DIR}")
+  message(STATUS "Using local piper-phonemize from ${piper_phonemize_SOURCE_DIR}")
   message(STATUS "piper-phonemize binary dir is ${piper_phonemize_BINARY_DIR}")
 
   if(BUILD_SHARED_LIBS)
