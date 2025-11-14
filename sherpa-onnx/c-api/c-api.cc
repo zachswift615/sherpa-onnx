@@ -1378,6 +1378,29 @@ static const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateInternal(
     ans->phoneme_char_length = nullptr;
   }
 
+  // NEW: Copy normalized text
+  if (!audio.normalized_text.empty()) {
+    char* normalized = new char[audio.normalized_text.length() + 1];
+    std::strcpy(normalized, audio.normalized_text.c_str());
+    ans->normalized_text = normalized;
+  } else {
+    ans->normalized_text = nullptr;
+  }
+
+  // NEW: Copy character mapping (flatten pairs into single array)
+  if (!audio.char_mapping.empty()) {
+    ans->char_mapping_count = audio.char_mapping.size();
+    int32_t* mapping = new int32_t[audio.char_mapping.size() * 2];
+    for (size_t i = 0; i < audio.char_mapping.size(); i++) {
+      mapping[i * 2] = audio.char_mapping[i].first;
+      mapping[i * 2 + 1] = audio.char_mapping[i].second;
+    }
+    ans->char_mapping = mapping;
+  } else {
+    ans->char_mapping = nullptr;
+    ans->char_mapping_count = 0;
+  }
+
   return ans;
 }
 
@@ -1507,6 +1530,29 @@ const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateWithZipvoice(
     ans->phoneme_char_length = nullptr;
   }
 
+  // NEW: Copy normalized text
+  if (!out.normalized_text.empty()) {
+    char* normalized = new char[out.normalized_text.length() + 1];
+    std::strcpy(normalized, out.normalized_text.c_str());
+    ans->normalized_text = normalized;
+  } else {
+    ans->normalized_text = nullptr;
+  }
+
+  // NEW: Copy character mapping (flatten pairs into single array)
+  if (!out.char_mapping.empty()) {
+    ans->char_mapping_count = out.char_mapping.size();
+    int32_t* mapping = new int32_t[out.char_mapping.size() * 2];
+    for (size_t i = 0; i < out.char_mapping.size(); i++) {
+      mapping[i * 2] = out.char_mapping[i].first;
+      mapping[i * 2 + 1] = out.char_mapping[i].second;
+    }
+    ans->char_mapping = mapping;
+  } else {
+    ans->char_mapping = nullptr;
+    ans->char_mapping_count = 0;
+  }
+
   return ans;
 }
 
@@ -1525,6 +1571,10 @@ void SherpaOnnxDestroyOfflineTtsGeneratedAudio(
     }
     delete[] p->phoneme_char_start;
     delete[] p->phoneme_char_length;
+
+    // NEW: Free normalized text and character mapping
+    delete[] p->normalized_text;
+    delete[] p->char_mapping;
 
     delete p;
   }

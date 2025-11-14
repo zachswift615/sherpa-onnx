@@ -261,6 +261,11 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
           ans.phonemes.insert(ans.phonemes.end(), seq.begin(), seq.end());
         }
       }
+      // NEW: Attach normalized text and char mapping if available
+      if (piper_frontend) {
+        ans.normalized_text = piper_frontend->GetLastNormalizedText();
+        ans.char_mapping = piper_frontend->GetLastCharMapping();
+      }
       if (callback) {
         callback(ans.samples.data(), ans.samples.size(), 1.0);
       }
@@ -351,6 +356,12 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
       for (const auto& seq : phoneme_sequences) {
         ans.phonemes.insert(ans.phonemes.end(), seq.begin(), seq.end());
       }
+    }
+
+    // NEW: Attach normalized text and char mapping if available
+    if (piper_frontend) {
+      ans.normalized_text = piper_frontend->GetLastNormalizedText();
+      ans.char_mapping = piper_frontend->GetLastCharMapping();
     }
 
     return ans;

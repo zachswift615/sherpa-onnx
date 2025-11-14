@@ -135,6 +135,64 @@ void CallPhonemizeEspeakWithPositions(
           phoneme_info->size());
 }
 
+void CallPhonemizeEspeakWithNormalized(
+    const std::string &text,
+    piper::eSpeakPhonemeConfig &config,  // NOLINT
+    std::vector<std::vector<piper::Phoneme>> *phonemes,
+    std::vector<PhonemeSequence> *phoneme_info,
+    std::string *normalized_text,
+    std::vector<std::pair<int32_t, int32_t>> *char_mapping) {
+  static std::mutex espeak_mutex;
+
+  std::lock_guard<std::mutex> lock(espeak_mutex);
+
+  // NOTE: For now, we just use the existing position API
+  // TODO: Once piper-phonemize is updated with PhonemeResult struct and
+  // phonemize_eSpeak_with_normalized function, we can use that instead
+
+  std::vector<std::vector<piper::PhonemePosition>> positions;
+  piper::phonemize_eSpeak_with_positions(text, config, *phonemes, positions);
+
+  // Convert piper::PhonemePosition to sherpa_onnx::PhonemeInfo
+  if (phoneme_info) {
+    phoneme_info->clear();
+    phoneme_info->reserve(phonemes->size());
+
+    for (size_t i = 0; i < phonemes->size() && i < positions.size(); ++i) {
+      PhonemeSequence sequence;
+      const auto &sentence_phonemes = (*phonemes)[i];
+      const auto &sentence_positions = positions[i];
+
+      sequence.reserve(sentence_phonemes.size());
+
+      for (size_t j = 0; j < sentence_phonemes.size() && j < sentence_positions.size(); ++j) {
+        // Convert char32_t phoneme to UTF-8 string
+        std::string phoneme_str = ToString(sentence_phonemes[j]);
+
+        // Create PhonemeInfo from PhonemePosition
+        PhonemeInfo info(
+            phoneme_str,
+            sentence_positions[j].text_position,
+            sentence_positions[j].length);
+
+        sequence.push_back(info);
+      }
+
+      phoneme_info->push_back(std::move(sequence));
+    }
+  }
+
+  // For now, we leave normalized_text and char_mapping empty
+  // TODO: These will be populated once piper-phonemize is updated with the
+  // phonemize_eSpeak_with_normalized function (Task 3 of the plan)
+  if (normalized_text) {
+    normalized_text->clear();
+  }
+  if (char_mapping) {
+    char_mapping->clear();
+  }
+}
+
 static std::unordered_map<char32_t, int32_t> ReadTokens(std::istream &is) {
   std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;
   std::unordered_map<char32_t, int32_t> token2id;
@@ -536,7 +594,9 @@ std::vector<TokenIDs> PiperPhonemizeLexicon::ConvertTextToTokenIdsMatcha(
   std::vector<std::vector<piper::Phoneme>> phonemes;
   std::vector<PhonemeSequence> phoneme_info;
 
-  CallPhonemizeEspeakWithPositions(text, config, &phonemes, &phoneme_info);
+  // NEW: Call the version that captures normalized text
+  CallPhonemizeEspeakWithNormalized(text, config, &phonemes, &phoneme_info,
+                                     &last_normalized_text_, &last_char_mapping_);
 
   // Store the phoneme sequences for later use
   last_phoneme_sequences_ = phoneme_info;
@@ -599,7 +659,9 @@ std::vector<TokenIDs> PiperPhonemizeLexicon::ConvertTextToTokenIdsVits(
   std::vector<std::vector<piper::Phoneme>> phonemes;
   std::vector<PhonemeSequence> phoneme_info;
 
-  CallPhonemizeEspeakWithPositions(text, config, &phonemes, &phoneme_info);
+  // NEW: Call the version that captures normalized text
+  CallPhonemizeEspeakWithNormalized(text, config, &phonemes, &phoneme_info,
+                                     &last_normalized_text_, &last_char_mapping_);
 
   // Store the phoneme sequences for later use
   last_phoneme_sequences_ = phoneme_info;

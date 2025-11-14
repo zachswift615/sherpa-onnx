@@ -62,6 +62,10 @@ struct GeneratedAudio {
   // NEW: Phoneme sequence with character positions
   PhonemeSequence phonemes;
 
+  // NEW: Normalized text and character mapping from espeak-ng
+  std::string normalized_text;
+  std::vector<std::pair<int32_t, int32_t>> char_mapping;  // [original_pos, normalized_pos] pairs
+
   // Silence means pause here.
   // If scale > 1, then it increases the duration of a pause
   // If scale < 1, then it reduces the duration of a pause

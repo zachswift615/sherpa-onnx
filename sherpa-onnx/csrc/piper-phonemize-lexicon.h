@@ -60,6 +60,16 @@ class PiperPhonemizeLexicon : public OfflineTtsFrontend {
     return last_phoneme_sequences_;
   }
 
+  // Get the normalized text from the last phonemize call
+  const std::string& GetLastNormalizedText() const {
+    return last_normalized_text_;
+  }
+
+  // Get the character mapping from the last phonemize call
+  const std::vector<std::pair<int32_t, int32_t>>& GetLastCharMapping() const {
+    return last_char_mapping_;
+  }
+
  private:
   std::vector<TokenIDs> ConvertTextToTokenIdsVits(
       const std::string &text, const std::string &voice = "") const;
@@ -80,6 +90,10 @@ class PiperPhonemizeLexicon : public OfflineTtsFrontend {
 
   // Store the last phoneme sequences captured during ConvertTextToTokenIds
   mutable std::vector<PhonemeSequence> last_phoneme_sequences_;
+
+  // Store the normalized text and character mapping from the last phonemize call
+  mutable std::string last_normalized_text_;
+  mutable std::vector<std::pair<int32_t, int32_t>> last_char_mapping_;
 };
 
 }  // namespace sherpa_onnx
