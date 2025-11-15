@@ -299,6 +299,12 @@ class OfflineTtsMatchaImpl : public OfflineTtsImpl {
 
     if (config_.max_num_sentences <= 0 || x_size <= config_.max_num_sentences) {
       auto ans = Process(x, sid, speed);
+      // NEW: Attach normalized text and char mapping if available
+      auto* piper_frontend = dynamic_cast<PiperPhonemizeLexicon*>(frontend_.get());
+      if (piper_frontend) {
+        ans.normalized_text = piper_frontend->GetLastNormalizedText();
+        ans.char_mapping = piper_frontend->GetLastCharMapping();
+      }
       if (callback) {
         callback(ans.samples.data(), ans.samples.size(), 1.0);
       }
@@ -370,6 +376,13 @@ class OfflineTtsMatchaImpl : public OfflineTtsImpl {
         // should copy the data if they want to access the data after
         // the callback returns to avoid segmentation fault.
       }
+    }
+
+    // NEW: Attach normalized text and char mapping if available (for batched case)
+    auto* piper_frontend = dynamic_cast<PiperPhonemizeLexicon*>(frontend_.get());
+    if (piper_frontend) {
+      ans.normalized_text = piper_frontend->GetLastNormalizedText();
+      ans.char_mapping = piper_frontend->GetLastCharMapping();
     }
 
     return ans;

@@ -325,6 +325,13 @@ class OfflineTtsKokoroImpl : public OfflineTtsImpl {
       }
     }
 
+    // NEW: Attach normalized text and char mapping if available (for batched case)
+    auto* piper_frontend = dynamic_cast<PiperPhonemizeLexicon*>(frontend_.get());
+    if (piper_frontend) {
+      ans.normalized_text = piper_frontend->GetLastNormalizedText();
+      ans.char_mapping = piper_frontend->GetLastCharMapping();
+    }
+
     return ans;
   }
 
