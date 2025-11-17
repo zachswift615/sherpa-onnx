@@ -1326,8 +1326,15 @@ static const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateInternal(
     int32_t *durations = new int32_t[audio.phoneme_durations.size()];
     std::copy(audio.phoneme_durations.begin(), audio.phoneme_durations.end(), durations);
     ans->phoneme_durations = durations;
+
+    fprintf(stderr, "[C-API] Marshaled %zu phoneme durations\n", audio.phoneme_durations.size());
+    // Show first 3 durations
+    for (size_t i = 0; i < std::min(size_t(3), audio.phoneme_durations.size()); i++) {
+      fprintf(stderr, "[C-API]   duration[%zu]=%d samples\n", i, durations[i]);
+    }
   } else {
     ans->phoneme_durations = nullptr;
+    fprintf(stderr, "[C-API] WARNING: No phoneme durations to marshal\n");
   }
 
   // Copy phoneme sequence data if available
@@ -1347,6 +1354,13 @@ static const SherpaOnnxGeneratedAudio *SherpaOnnxOfflineTtsGenerateInternal(
     ans->phoneme_symbols = symbols;
     ans->phoneme_char_start = char_starts;
     ans->phoneme_char_length = char_lengths;
+
+    fprintf(stderr, "[C-API] Marshaled %zu phonemes with positions\n", audio.phonemes.size());
+    // Show first 3 phoneme positions
+    for (size_t i = 0; i < std::min(size_t(3), audio.phonemes.size()); i++) {
+      fprintf(stderr, "[C-API]   phoneme[%zu]: symbol='%s', char_start=%d, char_len=%d\n",
+              i, symbols[i], char_starts[i], char_lengths[i]);
+    }
   } else {
     ans->phoneme_symbols = nullptr;
     ans->phoneme_char_start = nullptr;

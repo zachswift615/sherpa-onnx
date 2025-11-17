@@ -108,6 +108,14 @@ void CallPhonemizeEspeakWithPositions(
       // Convert char32_t phoneme to UTF-8 string
       std::string phoneme_str = ToString(sentence_phonemes[j]);
 
+      // Debug: Log position info received from piper-phonemize
+      if (j < 10) { // Log first 10 phonemes to avoid spam
+        fprintf(stderr, "[SHERPA-ONNX] Phoneme %zu: '%s' position=%d length=%d\n",
+                j, phoneme_str.c_str(),
+                sentence_positions[j].text_position,
+                sentence_positions[j].length);
+      }
+
       // Create PhonemeInfo from PhonemePosition
       PhonemeInfo info(
           phoneme_str,
@@ -594,8 +602,14 @@ std::vector<TokenIDs> PiperPhonemizeLexicon::ConvertTextToTokenIdsMatcha(
   std::vector<PhonemeSequence> phoneme_info;
 
   // NEW: Call the version that captures normalized text
+  // DEBUG: Log before and after to verify state management
+  fprintf(stderr, "[DEBUG] About to phonemize text: '%s'\n", text.c_str());
+  fprintf(stderr, "[DEBUG] Previous normalized text was: '%s'\n", last_normalized_text_.c_str());
+
   CallPhonemizeEspeakWithNormalized(text, config, &phonemes, &phoneme_info,
                                      &last_normalized_text_, &last_char_mapping_);
+
+  fprintf(stderr, "[DEBUG] New normalized text is: '%s'\n", last_normalized_text_.c_str());
 
   // Store the phoneme sequences for later use
   last_phoneme_sequences_ = phoneme_info;
@@ -609,6 +623,17 @@ std::vector<TokenIDs> PiperPhonemizeLexicon::ConvertTextToTokenIdsMatcha(
     for (auto &ids : phoneme_ids) {
       ans.emplace_back(std::move(ids));
     }
+  }
+
+  // NEW: Populate phoneme data in ALL TokenIDs to eliminate race condition
+  // This ensures phoneme_sequences, normalized_text, and char_mapping are
+  // returned atomically with the tokens (no race window for state contamination)
+  // Store phoneme_info as a single-element vector (will be flattened later)
+  std::vector<PhonemeSequence> sequences = {phoneme_info};
+  for (auto& token_id : ans) {
+    token_id.phoneme_sequences = sequences;
+    token_id.normalized_text = last_normalized_text_;
+    token_id.char_mapping = last_char_mapping_;
   }
 
   return ans;
@@ -659,8 +684,14 @@ std::vector<TokenIDs> PiperPhonemizeLexicon::ConvertTextToTokenIdsVits(
   std::vector<PhonemeSequence> phoneme_info;
 
   // NEW: Call the version that captures normalized text
+  // DEBUG: Log before and after to verify state management
+  fprintf(stderr, "[DEBUG] About to phonemize text: '%s'\n", text.c_str());
+  fprintf(stderr, "[DEBUG] Previous normalized text was: '%s'\n", last_normalized_text_.c_str());
+
   CallPhonemizeEspeakWithNormalized(text, config, &phonemes, &phoneme_info,
                                      &last_normalized_text_, &last_char_mapping_);
+
+  fprintf(stderr, "[DEBUG] New normalized text is: '%s'\n", last_normalized_text_.c_str());
 
   // Store the phoneme sequences for later use
   last_phoneme_sequences_ = phoneme_info;
@@ -683,6 +714,17 @@ std::vector<TokenIDs> PiperPhonemizeLexicon::ConvertTextToTokenIdsVits(
   } else {
     SHERPA_ONNX_LOGE("Unsupported model");
     SHERPA_ONNX_EXIT(-1);
+  }
+
+  // NEW: Populate phoneme data in ALL TokenIDs to eliminate race condition
+  // This ensures phoneme_sequences, normalized_text, and char_mapping are
+  // returned atomically with the tokens (no race window for state contamination)
+  // Store phoneme_info as a single-element vector (will be flattened later)
+  std::vector<PhonemeSequence> sequences = {phoneme_info};
+  for (auto& token_id : ans) {
+    token_id.phoneme_sequences = sequences;
+    token_id.normalized_text = last_normalized_text_;
+    token_id.char_mapping = last_char_mapping_;
   }
 
   return ans;

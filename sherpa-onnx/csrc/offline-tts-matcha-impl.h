@@ -270,6 +270,16 @@ class OfflineTtsMatchaImpl : public OfflineTtsImpl {
     std::vector<TokenIDs> token_ids =
         frontend_->ConvertTextToTokenIds(text, meta_data.voice);
 
+    // Capture normalized text and char mapping IMMEDIATELY after tokenization
+    // to avoid race conditions with lookahead synthesis
+    std::string normalized_text;
+    std::vector<std::pair<int32_t, int32_t>> char_mapping;
+    auto* piper_frontend = dynamic_cast<PiperPhonemizeLexicon*>(frontend_.get());
+    if (piper_frontend) {
+      normalized_text = piper_frontend->GetLastNormalizedText();
+      char_mapping = piper_frontend->GetLastCharMapping();
+    }
+
     if (token_ids.empty() ||
         (token_ids.size() == 1 && token_ids[0].tokens.empty())) {
 #if __OHOS__
@@ -299,12 +309,9 @@ class OfflineTtsMatchaImpl : public OfflineTtsImpl {
 
     if (config_.max_num_sentences <= 0 || x_size <= config_.max_num_sentences) {
       auto ans = Process(x, sid, speed);
-      // NEW: Attach normalized text and char mapping if available
-      auto* piper_frontend = dynamic_cast<PiperPhonemizeLexicon*>(frontend_.get());
-      if (piper_frontend) {
-        ans.normalized_text = piper_frontend->GetLastNormalizedText();
-        ans.char_mapping = piper_frontend->GetLastCharMapping();
-      }
+      // NEW: Attach normalized text and char mapping (use captured values)
+      ans.normalized_text = normalized_text;
+      ans.char_mapping = char_mapping;
       if (callback) {
         callback(ans.samples.data(), ans.samples.size(), 1.0);
       }
@@ -378,12 +385,9 @@ class OfflineTtsMatchaImpl : public OfflineTtsImpl {
       }
     }
 
-    // NEW: Attach normalized text and char mapping if available (for batched case)
-    auto* piper_frontend = dynamic_cast<PiperPhonemizeLexicon*>(frontend_.get());
-    if (piper_frontend) {
-      ans.normalized_text = piper_frontend->GetLastNormalizedText();
-      ans.char_mapping = piper_frontend->GetLastCharMapping();
-    }
+    // NEW: Attach normalized text and char mapping (use captured values)
+    ans.normalized_text = normalized_text;
+    ans.char_mapping = char_mapping;
 
     return ans;
   }

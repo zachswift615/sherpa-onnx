@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "sherpa-onnx/csrc/macros.h"
+#include "sherpa-onnx/csrc/phoneme-info.h"
 
 namespace sherpa_onnx {
 
@@ -33,6 +34,13 @@ struct TokenIDs {
 
   // Used only in MeloTTS
   std::vector<int64_t> tones;
+
+  // NEW: Phoneme data for Piper models (eliminates race condition)
+  // These fields are populated atomically with tokens during ConvertTextToTokenIds,
+  // avoiding the race window that existed when using mutable "last_*" member variables
+  std::vector<PhonemeSequence> phoneme_sequences;
+  std::string normalized_text;
+  std::vector<std::pair<int32_t, int32_t>> char_mapping;
 };
 
 class OfflineTtsFrontend {
@@ -57,10 +65,6 @@ class OfflineTtsFrontend {
 
 // implementation is in ./piper-phonemize-lexicon.cc
 void InitEspeak(const std::string &data_dir);
-
-// Forward declaration from phoneme-info.h
-class PhonemeInfo;
-using PhonemeSequence = std::vector<PhonemeInfo>;
 
 // implementation in ./piper-phonemize-lexicon.cc
 std::vector<TokenIDs> ConvertTextToTokenIdsKokoroOrKitten(

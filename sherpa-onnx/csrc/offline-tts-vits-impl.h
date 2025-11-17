@@ -215,11 +215,25 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
       return {};
     }
 
-    // Capture phoneme sequences from the frontend if it's a PiperPhonemizeLexicon
+    // NEW: Extract phoneme data directly from TokenIDs (no race condition!)
+    // The phoneme_sequences, normalized_text, and char_mapping are now populated
+    // atomically with the tokens during ConvertTextToTokenIds, eliminating the
+    // race window that existed when using mutable "last_*" member variables.
     std::vector<PhonemeSequence> phoneme_sequences;
-    auto* piper_frontend = dynamic_cast<PiperPhonemizeLexicon*>(frontend_.get());
-    if (piper_frontend) {
-      phoneme_sequences = piper_frontend->GetLastPhonemeSequences();
+    std::string normalized_text;
+    std::vector<std::pair<int32_t, int32_t>> char_mapping;
+
+    // Extract from first TokenIDs (all should have the same phoneme data)
+    if (!token_ids.empty() && !token_ids[0].phoneme_sequences.empty()) {
+      // Flatten all phoneme sequences from all TokenIDs
+      for (const auto& token_id : token_ids) {
+        for (const auto& seq : token_id.phoneme_sequences) {
+          phoneme_sequences.push_back(seq);
+        }
+      }
+      // Use normalized text and char mapping from first TokenID (all are identical)
+      normalized_text = token_ids[0].normalized_text;
+      char_mapping = token_ids[0].char_mapping;
     }
 
     std::vector<std::vector<int64_t>> x;
@@ -261,11 +275,9 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
           ans.phonemes.insert(ans.phonemes.end(), seq.begin(), seq.end());
         }
       }
-      // NEW: Attach normalized text and char mapping if available
-      if (piper_frontend) {
-        ans.normalized_text = piper_frontend->GetLastNormalizedText();
-        ans.char_mapping = piper_frontend->GetLastCharMapping();
-      }
+      // NEW: Attach normalized text and char mapping (use captured values)
+      ans.normalized_text = normalized_text;
+      ans.char_mapping = char_mapping;
       if (callback) {
         callback(ans.samples.data(), ans.samples.size(), 1.0);
       }
@@ -317,6 +329,13 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
       ans.sample_rate = audio.sample_rate;
       ans.samples.insert(ans.samples.end(), audio.samples.begin(),
                          audio.samples.end());
+      ans.phoneme_durations.insert(ans.phoneme_durations.end(),
+                                   audio.phoneme_durations.begin(),
+                                   audio.phoneme_durations.end());
+
+      fprintf(stderr, "[SHERPA-TTS] Batch %d: added %zu durations, total now %zu\n",
+              b, audio.phoneme_durations.size(), ans.phoneme_durations.size());
+
       if (callback) {
         should_continue = callback(audio.samples.data(), audio.samples.size(),
                                    (b + 1) * 1.0 / num_batches);
@@ -342,6 +361,13 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
       ans.sample_rate = audio.sample_rate;
       ans.samples.insert(ans.samples.end(), audio.samples.begin(),
                          audio.samples.end());
+      ans.phoneme_durations.insert(ans.phoneme_durations.end(),
+                                   audio.phoneme_durations.begin(),
+                                   audio.phoneme_durations.end());
+
+      fprintf(stderr, "[SHERPA-TTS] Remainder: added %zu durations, final total %zu\n",
+              audio.phoneme_durations.size(), ans.phoneme_durations.size());
+
       if (callback) {
         callback(audio.samples.data(), audio.samples.size(), 1.0);
         // Caution(fangjun): audio is freed when the callback returns, so users
@@ -358,10 +384,16 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
       }
     }
 
-    // NEW: Attach normalized text and char mapping if available
-    if (piper_frontend) {
-      ans.normalized_text = piper_frontend->GetLastNormalizedText();
-      ans.char_mapping = piper_frontend->GetLastCharMapping();
+    // NEW: Attach normalized text and char mapping (use captured values)
+    ans.normalized_text = normalized_text;
+    ans.char_mapping = char_mapping;
+
+    // DIAGNOSTIC: Log the mismatch for Swift to handle
+    if (!ans.phonemes.empty() && !ans.phoneme_durations.empty()) {
+      fprintf(stderr, "[SHERPA-TTS] Audio duration: %.3f samples (%.3fs)\n",
+              (double)ans.samples.size(), (double)ans.samples.size() / ans.sample_rate);
+      fprintf(stderr, "[SHERPA-TTS] Phoneme count: %zu (positioned), Duration count: %zu (total)\n",
+              ans.phonemes.size(), ans.phoneme_durations.size());
     }
 
     return ans;
@@ -506,11 +538,25 @@ class OfflineTtsVitsImpl : public OfflineTtsImpl {
         int64_t num_phonemes = durations_shape[0];
         const int64_t* duration_data = vits_output.phoneme_durations.GetTensorData<int64_t>();
 
+        fprintf(stderr, "[SHERPA-TTS] Extracting w_ceil: %lld phonemes\n", num_phonemes);
+
         ans.phoneme_durations.reserve(num_phonemes);
+        int64_t total_samples = 0;
         for (int64_t i = 0; i < num_phonemes; i++) {
           // Multiply by 256 to get actual sample counts (per Piper VITS implementation)
-          ans.phoneme_durations.push_back(static_cast<int32_t>(duration_data[i] * 256));
+          int32_t duration_samples = static_cast<int32_t>(duration_data[i] * 256);
+          ans.phoneme_durations.push_back(duration_samples);
+          total_samples += duration_samples;
+
+          // Log first 5 durations for debugging
+          if (i < 5) {
+            fprintf(stderr, "[SHERPA-TTS]   w_ceil[%lld]=%lld -> duration=%d samples (%.3fs @ 22050Hz)\n",
+                    i, duration_data[i], duration_samples, duration_samples / 22050.0);
+          }
         }
+
+        fprintf(stderr, "[SHERPA-TTS] Total duration: %lld samples (%.2fs @ 22050Hz)\n",
+                total_samples, total_samples / 22050.0);
       } catch (...) {
         // If extracting durations fails, leave the vector empty
         // This ensures backward compatibility with models that don't output durations
