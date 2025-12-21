@@ -66,7 +66,10 @@ Ort::SessionOptions GetSessionOptionsImpl(
 
   switch (p) {
     case Provider::kCPU:
-      break;  // nothing to do for the CPU provider
+      // Reduce memory growth when input shapes vary (e.g., TTS, ASR)
+      sess_opts.DisableMemPattern();
+      sess_opts.DisableCpuMemArena();
+      break;
     case Provider::kXnnpack: {
 #if ORT_API_VERSION >= 12
       if (std::find(available_providers.begin(), available_providers.end(),
