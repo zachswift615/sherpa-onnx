@@ -204,6 +204,9 @@ static std::vector<int64_t> PiperPhonemesToIdsVits(
   ans.reserve(phonemes.size());
 
   ans.push_back(bos);
+  // Piper (piper-phonemize and piper1-gpl) puts a pad right after BOS, and
+  // its voices were trained on that sequence.
+  ans.push_back(pad);
   size_t i = 0;
   while (i < phonemes.size()) {
     // Piper 1.5 vowel clusters: adjacent code points that form one token
