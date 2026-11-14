@@ -4,6 +4,7 @@
 
 #include "sherpa-onnx/csrc/piper-phonemize-lexicon.h"
 
+#include <algorithm>
 #include <fstream>
 #include <locale>
 #include <map>
@@ -109,7 +110,12 @@ static bool ParsePhonemeInput(
   return true;
 }
 
-static std::unordered_map<char32_t, int32_t> ReadTokens(std::istream &is) {
+// Multi-code-point tokens (e.g. "aɪ 161") are the vowel clusters of Piper 1.5
+// voices (`vowel_clusters` in the voice's .onnx.json). They are collected in
+// *clusters, longest first, and merged before id lookup by
+// PiperPhonemesToIdsVits. Voices without such lines are unaffected.
+static std::unordered_map<char32_t, int32_t> ReadTokens(
+    std::istream &is, std::vector<PhonemeCluster> *clusters = nullptr) {
   std::unordered_map<char32_t, int32_t> token2id;
 
   std::string line;
@@ -142,6 +148,18 @@ static std::unordered_map<char32_t, int32_t> ReadTokens(std::istream &is) {
         continue;
       }
 
+      if (clusters != nullptr && s.size() > 1) {
+        for (const auto &c : *clusters) {
+          if (c.first == s) {
+            SHERPA_ONNX_LOGE("Duplicated cluster token %s. Line %s",
+                             sym.c_str(), line.c_str());
+            SHERPA_ONNX_EXIT(-1);
+          }
+        }
+        clusters->emplace_back(s, id);
+        continue;
+      }
+
       SHERPA_ONNX_LOGE("Error when reading tokens at Line %s. size: %d",
                        line.c_str(), static_cast<int32_t>(s.size()));
       SHERPA_ONNX_EXIT(-1);
@@ -158,6 +176,15 @@ static std::unordered_map<char32_t, int32_t> ReadTokens(std::istream &is) {
     token2id.insert({c, id});
   }
 
+  if (clusters != nullptr) {
+    // Longest first, so the first match in PiperPhonemesToIdsVits is the
+    // longest, as in piper1-gpl.
+    std::stable_sort(clusters->begin(), clusters->end(),
+                     [](const PhonemeCluster &a, const PhonemeCluster &b) {
+                       return a.first.size() > b.first.size();
+                     });
+  }
+
   return token2id;
 }
 
@@ -165,6 +192,7 @@ static std::unordered_map<char32_t, int32_t> ReadTokens(std::istream &is) {
 // https://github.com/rhasspy/piper/blob/master/notebooks/piper_inference_(ONNX).ipynb
 static std::vector<int64_t> PiperPhonemesToIdsVits(
     const std::unordered_map<char32_t, int32_t> &token2id,
+    const std::vector<PhonemeCluster> &clusters,
     const std::vector<piper::Phoneme> &phonemes) {
   // see
   // https://github.com/rhasspy/piper-phonemize/blob/master/src/phoneme_ids.hpp#L17
@@ -176,7 +204,36 @@ static std::vector<int64_t> PiperPhonemesToIdsVits(
   ans.reserve(phonemes.size());
 
   ans.push_back(bos);
-  for (auto p : phonemes) {
+  size_t i = 0;
+  while (i < phonemes.size()) {
+    // Piper 1.5 vowel clusters: adjacent code points that form one token
+    // (longest match first; see piper1-gpl libpiper/src/piper.cpp). Empty
+    // for older voices, which take the single-code-point path below.
+    const PhonemeCluster *matched = nullptr;
+    for (const auto &c : clusters) {
+      const auto &cps = c.first;
+      if (i + cps.size() > phonemes.size()) continue;
+      bool eq = true;
+      for (size_t k = 0; k < cps.size(); ++k) {
+        if (static_cast<char32_t>(phonemes[i + k]) != cps[k]) {
+          eq = false;
+          break;
+        }
+      }
+      if (eq) {
+        matched = &c;
+        break;
+      }
+    }
+
+    if (matched != nullptr) {
+      ans.push_back(matched->second);
+      ans.push_back(pad);
+      i += matched->first.size();
+      continue;
+    }
+
+    auto p = phonemes[i];
     if (token2id.count(p)) {
       ans.push_back(token2id.at(p));
       ans.push_back(pad);
@@ -184,6 +241,7 @@ static std::vector<int64_t> PiperPhonemesToIdsVits(
       SHERPA_ONNX_LOGE("Skip unknown phonemes. Unicode codepoint: \\U+%04x.",
                        static_cast<uint32_t>(p));
     }
+    ++i;
   }
   ans.push_back(eos);
 
@@ -377,7 +435,7 @@ PiperPhonemizeLexicon::PiperPhonemizeLexicon(
     : vits_meta_data_(vits_meta_data) {
   {
     std::ifstream is(tokens);
-    token2id_ = ReadTokens(is);
+    token2id_ = ReadTokens(is, &clusters_);
   }
 
   InitEspeak(data_dir);
@@ -391,7 +449,7 @@ PiperPhonemizeLexicon::PiperPhonemizeLexicon(
   {
     auto buf = ReadFile(mgr, tokens);
     std::istringstream is(std::string(buf.data(), buf.size()));
-    token2id_ = ReadTokens(is);
+    token2id_ = ReadTokens(is, &clusters_);
   }
 
   // We should copy the directory of espeak-ng-data from the asset to
@@ -406,7 +464,7 @@ PiperPhonemizeLexicon::PiperPhonemizeLexicon(
     : matcha_meta_data_(matcha_meta_data), is_matcha_(true) {
   {
     std::ifstream is(tokens);
-    token2id_ = ReadTokens(is);
+    token2id_ = ReadTokens(is, &clusters_);
   }
 
   InitEspeak(data_dir);
@@ -418,7 +476,7 @@ PiperPhonemizeLexicon::PiperPhonemizeLexicon(
     : kokoro_meta_data_(kokoro_meta_data), is_kokoro_(true) {
   {
     std::ifstream is(tokens);
-    token2id_ = ReadTokens(is);
+    token2id_ = ReadTokens(is, &clusters_);
   }
 
   InitEspeak(data_dir);
@@ -430,7 +488,7 @@ PiperPhonemizeLexicon::PiperPhonemizeLexicon(
     : kitten_meta_data_(kitten_meta_data), is_kitten_(true) {
   {
     std::ifstream is(tokens);
-    token2id_ = ReadTokens(is);
+    token2id_ = ReadTokens(is, &clusters_);
   }
 
   InitEspeak(data_dir);
@@ -444,7 +502,7 @@ PiperPhonemizeLexicon::PiperPhonemizeLexicon(
   {
     auto buf = ReadFile(mgr, tokens);
     std::istringstream is(std::string(buf.data(), buf.size()));
-    token2id_ = ReadTokens(is);
+    token2id_ = ReadTokens(is, &clusters_);
   }
 
   // We should copy the directory of espeak-ng-data from the asset to
@@ -461,7 +519,7 @@ PiperPhonemizeLexicon::PiperPhonemizeLexicon(
   {
     auto buf = ReadFile(mgr, tokens);
     std::istringstream is(std::string(buf.data(), buf.size()));
-    token2id_ = ReadTokens(is);
+    token2id_ = ReadTokens(is, &clusters_);
   }
 
   // We should copy the directory of espeak-ng-data from the asset to
@@ -478,7 +536,7 @@ PiperPhonemizeLexicon::PiperPhonemizeLexicon(
   {
     auto buf = ReadFile(mgr, tokens);
     std::istringstream is(std::string(buf.data(), buf.size()));
-    token2id_ = ReadTokens(is);
+    token2id_ = ReadTokens(is, &clusters_);
   }
 
   // We should copy the directory of espeak-ng-data from the asset to
@@ -576,7 +634,7 @@ std::vector<TokenIDs> PiperPhonemizeLexicon::ConvertTextToTokenIdsVits(
 
   if (vits_meta_data_.is_piper || vits_meta_data_.is_icefall) {
     for (const auto &p : phonemes) {
-      phoneme_ids = PiperPhonemesToIdsVits(token2id_, p);
+      phoneme_ids = PiperPhonemesToIdsVits(token2id_, clusters_, p);
       ans.emplace_back(std::move(phoneme_ids));
     }
   } else if (vits_meta_data_.is_coqui) {

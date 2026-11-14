@@ -6,6 +6,7 @@
 #define SHERPA_ONNX_CSRC_PIPER_PHONEMIZE_LEXICON_H_
 
 #include <string>
+#include <utility>
 #include <unordered_map>
 #include <vector>
 
@@ -16,6 +17,9 @@
 #include "sherpa-onnx/csrc/offline-tts-vits-model-meta-data.h"
 
 namespace sherpa_onnx {
+
+// A multi-code-point token from tokens.txt and its id.
+using PhonemeCluster = std::pair<std::u32string, int32_t>;
 
 class PiperPhonemizeLexicon : public OfflineTtsFrontend {
  public:
@@ -64,6 +68,9 @@ class PiperPhonemizeLexicon : public OfflineTtsFrontend {
  private:
   // map unicode codepoint to an integer ID
   std::unordered_map<char32_t, int32_t> token2id_;
+  // Piper 1.5 vowel clusters from multi-code-point lines in tokens.txt,
+  // longest first. Empty for older voices.
+  std::vector<PhonemeCluster> clusters_;
   OfflineTtsVitsModelMetaData vits_meta_data_;
   OfflineTtsMatchaModelMetaData matcha_meta_data_;
   OfflineTtsKokoroModelMetaData kokoro_meta_data_;
