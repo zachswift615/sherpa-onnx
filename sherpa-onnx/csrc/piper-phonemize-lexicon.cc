@@ -23,9 +23,7 @@
 #include "rawfile/raw_file_manager.h"
 #endif
 
-#include "espeak-ng/speak_lib.h"
-#include "phoneme_ids.hpp"  // NOLINT
-#include "phonemize.hpp"    // NOLINT
+#include "sherpa-onnx/csrc/espeak-shim.h"
 #include "sherpa-onnx/csrc/file-utils.h"
 #include "sherpa-onnx/csrc/macros.h"
 #include "sherpa-onnx/csrc/text-utils.h"
@@ -61,12 +59,54 @@ static std::string ToString(char32_t cp) {
 void CallPhonemizeEspeak(const std::string &text,
                          piper::eSpeakPhonemeConfig &config,  // NOLINT
                          std::vector<std::vector<piper::Phoneme>> *phonemes) {
+#if SHERPA_ONNX_ENABLE_ESPEAK
   static std::mutex espeak_mutex;
 
   std::lock_guard<std::mutex> lock(espeak_mutex);
 
   // keep multi threads from calling into piper::phonemize_eSpeak
   piper::phonemize_eSpeak(text, config, *phonemes);
+#else
+  (void)text;
+  (void)config;
+  phonemes->clear();
+  SHERPA_ONNX_LOGE(
+      "This build has no espeak-ng. Text cannot be phonemized here; pass "
+      "phonemes with the phoneme input marker instead.");
+#endif
+}
+
+// Listen2 fork: a text that starts with this marker is not text but phonemes
+// that the caller already produced (one Unicode code point per phoneme, the
+// same symbols as in tokens.txt). Sentences are separated by '\n'; each one
+// becomes its own utterance, exactly as espeak's sentences do.
+static const char kPhonemeInputMarker[] = "[[l2-phonemes]]";
+
+static bool ParsePhonemeInput(
+    const std::string &text,
+    std::vector<std::vector<piper::Phoneme>> *phonemes) {
+  size_t n = sizeof(kPhonemeInputMarker) - 1;
+  if (text.compare(0, n, kPhonemeInputMarker) != 0) {
+    return false;
+  }
+
+  phonemes->clear();
+  std::u32string s = Utf8ToUtf32(text.substr(n));
+  std::vector<piper::Phoneme> cur;
+  for (char32_t c : s) {
+    if (c == U'\n') {
+      if (!cur.empty()) {
+        phonemes->push_back(std::move(cur));
+        cur.clear();
+      }
+    } else if (c != U'\r') {
+      cur.push_back(static_cast<piper::Phoneme>(c));
+    }
+  }
+  if (!cur.empty()) {
+    phonemes->push_back(std::move(cur));
+  }
+  return true;
 }
 
 static std::unordered_map<char32_t, int32_t> ReadTokens(std::istream &is) {
@@ -297,6 +337,10 @@ static std::vector<int64_t> CoquiPhonemesToIds(
 }
 
 void InitEspeak(const std::string &data_dir) {
+#if !SHERPA_ONNX_ENABLE_ESPEAK
+  (void)data_dir;
+  return;
+#else
   static std::once_flag init_flag;
   std::call_once(init_flag, [data_dir]() {
 #if __ANDROID_API__ >= 9 || defined(__OHOS__)
@@ -324,6 +368,7 @@ void InitEspeak(const std::string &data_dir) {
       SHERPA_ONNX_EXIT(-1);
     }
   });
+#endif  // SHERPA_ONNX_ENABLE_ESPEAK
 }
 
 PiperPhonemizeLexicon::PiperPhonemizeLexicon(
@@ -521,7 +566,9 @@ std::vector<TokenIDs> PiperPhonemizeLexicon::ConvertTextToTokenIdsVits(
 
   std::vector<std::vector<piper::Phoneme>> phonemes;
 
-  CallPhonemizeEspeak(text, config, &phonemes);
+  if (!ParsePhonemeInput(text, &phonemes)) {
+    CallPhonemizeEspeak(text, config, &phonemes);
+  }
 
   std::vector<TokenIDs> ans;
 

@@ -447,7 +447,7 @@ endif()
 
 target_link_libraries(sherpa-onnx-core fstfar fst)
 
-if(SHERPA_ONNX_ENABLE_TTS)
+if(SHERPA_ONNX_ENABLE_TTS AND SHERPA_ONNX_ENABLE_ESPEAK)
   target_link_libraries(sherpa-onnx-core
     piper_phonemize)
 endif()

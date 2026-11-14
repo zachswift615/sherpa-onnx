@@ -22,9 +22,7 @@
 #include "rawfile/raw_file_manager.h"
 #endif
 
-#include "espeak-ng/speak_lib.h"
-#include "phoneme_ids.hpp"  // NOLINT
-#include "phonemize.hpp"    // NOLINT
+#include "sherpa-onnx/csrc/espeak-shim.h"
 #include "sherpa-onnx/csrc/file-utils.h"
 #include "sherpa-onnx/csrc/onnx-utils.h"
 #include "sherpa-onnx/csrc/phrase-matcher.h"

@@ -49,6 +49,7 @@ bool OfflineTtsVitsModelConfig::Validate() const {
     return false;
   }
 
+#if !defined(SHERPA_ONNX_ENABLE_ESPEAK) || SHERPA_ONNX_ENABLE_ESPEAK
   if (!data_dir.empty()) {
     if (!FileExists(data_dir + "/phontab")) {
       SHERPA_ONNX_LOGE(
@@ -78,6 +79,7 @@ bool OfflineTtsVitsModelConfig::Validate() const {
       return false;
     }
   }
+#endif  // a build without espeak-ng does not read data_dir
 
   if (!dict_dir.empty()) {
     SHERPA_ONNX_LOGE(
