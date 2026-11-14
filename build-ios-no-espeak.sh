@@ -72,4 +72,12 @@ xcodebuild -create-xcframework \
       -library "build/os64/libsherpa-onnx.a" -headers install/include \
       -library "build/simulator_arm64/libsherpa-onnx.a" -headers install/include \
       -output sherpa-onnx.xcframework
+# The app's sherpa-onnx.xcframework also carries the ONNX Runtime headers
+# (onnxruntime_c_api.h, coreml_provider_factory.h, ...); copy them into both
+# slices from the framework the app ships.
+ORT_HEADERS_FROM=${ORT_HEADERS_FROM:-$HOME/projects/Listen2/Frameworks/sherpa-onnx.xcframework/ios-arm64/Headers}
+for slice in ios-arm64 ios-arm64-simulator; do
+  cp "$ORT_HEADERS_FROM"/onnxruntime_*.h "$ORT_HEADERS_FROM"/*_provider_factory.h \
+     sherpa-onnx.xcframework/$slice/Headers/
+done
 echo "Done: $PWD/sherpa-onnx.xcframework (no espeak-ng)"
