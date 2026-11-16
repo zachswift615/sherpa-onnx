@@ -73,6 +73,7 @@ bool OfflineTtsKokoroModelConfig::Validate() const {
     }
   }
 
+#if !defined(SHERPA_ONNX_ENABLE_ESPEAK) || SHERPA_ONNX_ENABLE_ESPEAK
   if (data_dir.empty()) {
     SHERPA_ONNX_LOGE("Please provide --kokoro-data-dir");
     return false;
@@ -105,6 +106,7 @@ bool OfflineTtsKokoroModelConfig::Validate() const {
         data_dir.c_str());
     return false;
   }
+#endif  // a build without espeak-ng neither needs nor reads data_dir
 
   if (!dict_dir.empty()) {
     SHERPA_ONNX_LOGE(
