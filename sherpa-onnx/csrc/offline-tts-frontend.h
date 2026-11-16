@@ -59,6 +59,10 @@ class OfflineTtsFrontend {
 void InitEspeak(const std::string &data_dir);
 
 // implementation in ./piper-phonemize-lexicon.cc
+//
+// Listen2 fork: if text starts with "[[l2-phonemes]]" it is taken as
+// ready-made phonemes (one code point per token of tokens.txt, one sentence
+// per line) and espeak is not called.
 std::vector<TokenIDs> ConvertTextToTokenIdsKokoroOrKitten(
     const std::unordered_map<char32_t, int32_t> &token2id,
     int32_t max_token_len, const std::string &text,

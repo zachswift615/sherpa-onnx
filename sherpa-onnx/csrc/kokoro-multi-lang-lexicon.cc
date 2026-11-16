@@ -63,10 +63,32 @@ class KokoroMultiLangLexicon::Impl {
   }
 
   std::vector<TokenIDs> ConvertTextToTokenIds(const std::string &_text,
-                                              const std::string &voice) const {
+                                              const std::string &_voice) const {
+    std::vector<TokenIDs> ans;
+
+    // Listen2 fork, mode 1: "[[l2-phonemes]]" + phonemes, one sentence per
+    // line. Used as they are, in place of espeak's output for the whole text
+    // (see ConvertTextToTokenIdsKokoroOrKitten). No text rules apply.
+    if (StartsWith(_text, kPhonemeMarker)) {
+      AppendMerged(ConvertTextToTokenIDsWithEspeak(_text, _voice), &ans);
+      DebugPrint(ans);
+      return ans;
+    }
+
+    // Listen2 fork, mode 2: "[[l2-lexicon]]" + text. The text goes through
+    // the lexicon word by word whatever the language setting is, and a word
+    // written as ⟦phonemes⟧ is spoken with those phonemes (see
+    // ConvertNonChineseToTokenIDs). This is how the caller supplies the
+    // words that are not in the lexicon, which espeak used to handle.
+    std::string voice = _voice;
+    std::string text = _text;
+    if (StartsWith(_text, kLexiconMarker)) {
+      voice.clear();
+      text = _text.substr(sizeof(kLexiconMarker) - 1);
+    }
+
     // we cannot convert text to lowercase here since it will affect
     // how piper_phonemize handles punctuations inside the text
-    std::string text = _text;
 
     std::vector<std::pair<std::string, std::string>> replace_str_pairs = {
         {"，", ","}, {":", ","},  {"、", ","}, {"；", ";"},   {"：", ":"},
@@ -99,8 +121,6 @@ class KokoroMultiLangLexicon::Impl {
     auto begin = std::wsregex_iterator(ws.begin(), ws.end(), we_both);
     auto end = std::wsregex_iterator();
 
-    std::vector<TokenIDs> ans;
-
     for (std::wsregex_iterator i = begin; i != end; ++i) {
       std::wsmatch match = *i;
       std::wstring match_str = match.str();
@@ -122,44 +142,116 @@ class KokoroMultiLangLexicon::Impl {
         ids_vec = ConvertNonChineseToTokenIDs(ms, voice);
       }
 
-      for (const auto &ids : ids_vec) {
-        if (ids.size() > 10 + 2) {
-          ans.emplace_back(ids);
-        } else {
-          if (ans.empty()) {
-            ans.emplace_back(ids);
-          } else {
-            if ((ans.back().tokens.size() + ids.size() < 50) ||
-                (ids.size() < 5)) {
-              ans.back().tokens.back() = ids[1];
-              ans.back().tokens.insert(ans.back().tokens.end(), ids.begin() + 2,
-                                       ids.end());
-            } else {
-              ans.emplace_back(ids);
-            }
-          }
-        }
-      }
+      AppendMerged(ids_vec, &ans);
     }
 
-    if (debug_) {
-      for (const auto &v : ans) {
-        std::ostringstream os;
-        os << "\n";
-        std::string sep;
-        for (auto i : v.tokens) {
-          os << sep << i;
-          sep = " ";
-        }
-        os << "\n";
-        SHERPA_ONNX_LOGE("%s", os.str().c_str());
-      }
-    }
+    DebugPrint(ans);
 
     return ans;
   }
 
  private:
+  // Listen2 fork: input markers. kPhonemeMarker must equal kPhonemeInputMarker
+  // in ./piper-phonemize-lexicon.cc.
+  static constexpr char kPhonemeMarker[] = "[[l2-phonemes]]";
+  static constexpr char kLexiconMarker[] = "[[l2-lexicon]]";
+  // A word written as ⟦phonemes⟧ (U+27E6 ... U+27E7) in lexicon mode.
+  static constexpr char kOpenPhonemes[] = "\xe2\x9f\xa6";   // ⟦
+  static constexpr char kClosePhonemes[] = "\xe2\x9f\xa7";  // ⟧
+
+  void DebugPrint(const std::vector<TokenIDs> &ans) const {
+    if (!debug_) {
+      return;
+    }
+    for (const auto &v : ans) {
+      std::ostringstream os;
+      os << "\n";
+      std::string sep;
+      for (auto i : v.tokens) {
+        os << sep << i;
+        sep = " ";
+      }
+      os << "\n";
+      SHERPA_ONNX_LOGE("%s", os.str().c_str());
+    }
+  }
+
+  static bool StartsWith(const std::string &s, const char *prefix) {
+    return s.rfind(prefix, 0) == 0;
+  }
+
+  // Merge very short utterances into the previous one (upstream rule).
+  static void AppendMerged(const std::vector<std::vector<int32_t>> &ids_vec,
+                           std::vector<TokenIDs> *ans) {
+    for (const auto &ids : ids_vec) {
+      if (ids.size() > 10 + 2) {
+        ans->emplace_back(ids);
+      } else {
+        if (ans->empty()) {
+          ans->emplace_back(ids);
+        } else {
+          if ((ans->back().tokens.size() + ids.size() < 50) ||
+              (ids.size() < 5)) {
+            ans->back().tokens.back() = ids[1];
+            ans->back().tokens.insert(ans->back().tokens.end(),
+                                      ids.begin() + 2, ids.end());
+          } else {
+            ans->emplace_back(ids);
+          }
+        }
+      }
+    }
+  }
+
+  // Like SplitUtf8(), but a ⟦...⟧ group stays one item, brackets included.
+  static std::vector<std::string> SplitWordsKeepingPhonemes(
+      const std::string &text) {
+    std::vector<std::string> ans;
+    size_t pos = 0;
+    const size_t open_len = sizeof(kOpenPhonemes) - 1;
+    const size_t close_len = sizeof(kClosePhonemes) - 1;
+    while (pos < text.size()) {
+      size_t open = text.find(kOpenPhonemes, pos);
+      size_t close = open == std::string::npos
+                         ? std::string::npos
+                         : text.find(kClosePhonemes, open + open_len);
+      if (close == std::string::npos) {
+        auto words = SplitUtf8(text.substr(pos));
+        ans.insert(ans.end(), words.begin(), words.end());
+        break;
+      }
+      if (open > pos) {
+        auto words = SplitUtf8(text.substr(pos, open - pos));
+        ans.insert(ans.end(), words.begin(), words.end());
+      }
+      ans.push_back(text.substr(open, close + close_len - open));
+      pos = close + close_len;
+    }
+    return ans;
+  }
+
+  static bool IsSuppliedPhonemes(const std::string &w) {
+    return StartsWith(w, kOpenPhonemes);
+  }
+
+  // ⟦phonemes⟧ -> token IDs, one code point per token; unknown ones skipped.
+  std::vector<int32_t> SuppliedPhonemesToIds(const std::string &w) const {
+    const size_t open_len = sizeof(kOpenPhonemes) - 1;
+    const size_t close_len = sizeof(kClosePhonemes) - 1;
+    std::string inner = w.substr(open_len, w.size() - open_len - close_len);
+    std::vector<int32_t> ids;
+    for (char32_t c : Utf8ToUtf32(inner)) {
+      auto it = phoneme2id_.find(c);
+      if (it != phoneme2id_.end()) {
+        ids.push_back(it->second);
+      } else if (debug_) {
+        SHERPA_ONNX_LOGE("Skip OOV token U+%04X in '%s'",
+                         static_cast<uint32_t>(c), w.c_str());
+      }
+    }
+    return ids;
+  }
+
   bool IsPunctuation(const std::string &text) const {
     if (text == ";" || text == ":" || text == "," || text == "." ||
         text == "!" || text == "?" || text == "—" || text == "…" ||
@@ -305,7 +397,7 @@ class KokoroMultiLangLexicon::Impl {
     // to lookup the pronunciation of each word, fallback to espeak if
     // a word is not in the lexicon.
 
-    std::vector<std::string> words = SplitUtf8(text);
+    std::vector<std::string> words = SplitWordsKeepingPhonemes(text);
     if (debug_) {
       std::ostringstream os;
       os << "After splitting to words: ";
@@ -349,6 +441,22 @@ class KokoroMultiLangLexicon::Impl {
         }
       } else if (word2ids_.count(word)) {
         const auto &ids = word2ids_.at(word);
+        if (this_sentence.size() + ids.size() + 3 > max_len - 2) {
+          this_sentence.push_back(0);
+          ans.push_back(std::move(this_sentence));
+
+          this_sentence.push_back(0);
+        }
+
+        this_sentence.insert(this_sentence.end(), ids.begin(), ids.end());
+        this_sentence.push_back(space_id);
+      } else if (IsSuppliedPhonemes(_word)) {
+        // Listen2 fork: the caller's phonemes for this word.
+        auto ids = SuppliedPhonemesToIds(_word);
+        if (ids.empty()) {
+          continue;
+        }
+
         if (this_sentence.size() + ids.size() + 3 > max_len - 2) {
           this_sentence.push_back(0);
           ans.push_back(std::move(this_sentence));

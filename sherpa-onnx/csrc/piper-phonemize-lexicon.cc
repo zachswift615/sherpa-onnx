@@ -601,7 +601,11 @@ std::vector<TokenIDs> ConvertTextToTokenIdsKokoroOrKitten(
 
   std::vector<std::vector<piper::Phoneme>> phonemes;
 
-  CallPhonemizeEspeak(text, config, &phonemes);
+  // Listen2 fork: ready-made phonemes (kPhonemeInputMarker) are used as they
+  // are, exactly as for Piper VITS above.
+  if (!ParsePhonemeInput(text, &phonemes)) {
+    CallPhonemizeEspeak(text, config, &phonemes);
+  }
 
   std::vector<TokenIDs> ans;
 
