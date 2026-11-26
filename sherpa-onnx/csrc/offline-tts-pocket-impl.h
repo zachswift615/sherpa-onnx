@@ -38,6 +38,25 @@
 
 namespace sherpa_onnx {
 
+// Workaround for ORT 1.23.2 iOS ABI issue where the C++ GetTensorData<T>()
+// triggers a broken SizeFromDimension validation. Uses the raw C API instead.
+template <typename T>
+inline const T *SafeGetTensorData(const Ort::Value &value) {
+  void *raw = nullptr;
+  Ort::ThrowOnError(Ort::GetApi().GetTensorMutableData(
+      const_cast<OrtValue *>(static_cast<const OrtValue *>(value)),
+      &raw));
+  return static_cast<const T *>(raw);
+}
+
+template <typename T>
+inline T *SafeGetTensorMutableData(Ort::Value &value) {
+  void *raw = nullptr;
+  Ort::ThrowOnError(Ort::GetApi().GetTensorMutableData(
+      static_cast<OrtValue *>(value), &raw));
+  return static_cast<T *>(raw);
+}
+
 class OfflineTtsPocketImpl : public OfflineTtsImpl {
  public:
   explicit OfflineTtsPocketImpl(const OfflineTtsConfig &config)
@@ -374,7 +393,7 @@ class OfflineTtsPocketImpl : public OfflineTtsImpl {
 
       std::tie(conditioning, eos_logit) = RunLmMain(
           std::move(cur_tensor), View(&empty_text_tensor), lm_main_state);
-      const float *p_logit = eos_logit.GetTensorData<float>();
+      const float *p_logit = SafeGetTensorData<float>(eos_logit);
 
       if (eos_step < 0 && p_logit[0] > -4) {
         eos_step = step;
@@ -394,10 +413,10 @@ class OfflineTtsPocketImpl : public OfflineTtsImpl {
         frame_size = n;
       }
 
-      cur = {latent.GetTensorData<float>(), latent.GetTensorData<float>() + n};
+      cur = {SafeGetTensorData<float>(latent), SafeGetTensorData<float>(latent) + n};
 
-      latent_list.insert(latent_list.end(), latent.GetTensorData<float>(),
-                         latent.GetTensorData<float>() + n);
+      latent_list.insert(latent_list.end(), SafeGetTensorData<float>(latent),
+                         SafeGetTensorData<float>(latent) + n);
     }
 
     lm_main_state.values.clear();
@@ -438,15 +457,15 @@ class OfflineTtsPocketImpl : public OfflineTtsImpl {
 
       if (callback) {
         should_continue =
-            callback(out.GetTensorData<float>(), n,
+            callback(SafeGetTensorData<float>(out), n,
                      (i + 1) * 1.0 / (num_chunks + !!remaining_chunks));
         // Caution(fangjun): out is freed when the callback returns, so users
         // should copy the data if they want to access the data after
         // the callback returns to avoid segmentation fault.
       }
 
-      audio_list.insert(audio_list.end(), out.GetTensorData<float>(),
-                        out.GetTensorData<float>() + n);
+      audio_list.insert(audio_list.end(), SafeGetTensorData<float>(out),
+                        SafeGetTensorData<float>(out) + n);
     }
 
     GeneratedAudio ans;
@@ -544,25 +563,59 @@ class OfflineTtsPocketImpl : public OfflineTtsImpl {
           model_->Allocator(), cached_embedding->second.data(),
           cached_embedding->second.size());
       std::copy(cached_embedding->first.begin(), cached_embedding->first.end(),
-                result.GetTensorMutableData<float>());
+                SafeGetTensorMutableData<float>(result));
       return result;
     }
 
+    SHERPA_ONNX_LOGE("[DIAG] GetVoiceEmbedding: about to CreateCpu, num_samples=%d",
+                     static_cast<int>(num_samples));
+
     auto memory_info =
         Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeDefault);
+
+    SHERPA_ONNX_LOGE("[DIAG] GetVoiceEmbedding: about to CreateTensor shape={1,1,%d}",
+                     static_cast<int>(num_samples));
 
     std::array<int64_t, 3> shape = {1, 1, num_samples};
     Ort::Value x =
         Ort::Value::CreateTensor(memory_info, const_cast<float *>(p_audio),
                                  num_samples, shape.data(), shape.size());
 
-    Ort::Value result = model_->RunMimiEncoder(std::move(x));
+    SHERPA_ONNX_LOGE("[DIAG] GetVoiceEmbedding: about to RunMimiEncoder");
 
+    Ort::Value result{nullptr};
+    try {
+      result = model_->RunMimiEncoder(std::move(x));
+    } catch (const Ort::Exception& e) {
+      SHERPA_ONNX_LOGE("RunMimiEncoder ORT exception: code=%d, msg=%s",
+                       static_cast<int>(e.GetOrtErrorCode()), e.what());
+      throw;
+    } catch (const std::exception& e) {
+      SHERPA_ONNX_LOGE("RunMimiEncoder std exception: %s", e.what());
+      throw;
+    }
+
+    SHERPA_ONNX_LOGE("[DIAG] GetVoiceEmbedding: RunMimiEncoder succeeded, result ptr=%p",
+                     static_cast<const void*>(static_cast<OrtValue*>(result)));
+
+    SHERPA_ONNX_LOGE("[DIAG] about to GetTensorTypeAndShapeInfo");
     auto info = result.GetTensorTypeAndShapeInfo();
-    auto result_shape = info.GetShape();
-    size_t total = info.GetElementCount();
-    const float *result_data = result.GetTensorData<float>();
 
+    SHERPA_ONNX_LOGE("[DIAG] about to GetShape");
+    auto result_shape = info.GetShape();
+
+    SHERPA_ONNX_LOGE("[DIAG] about to GetElementCount");
+    size_t total = info.GetElementCount();
+
+    SHERPA_ONNX_LOGE("[DIAG] about to GetTensorData via C API, total=%zu, shape=[%lld,%lld,%lld]",
+                     total,
+                     result_shape.size() > 0 ? result_shape[0] : -1,
+                     result_shape.size() > 1 ? result_shape[1] : -1,
+                     result_shape.size() > 2 ? result_shape[2] : -1);
+
+    const float *result_data = SafeGetTensorData<float>(result);
+
+    SHERPA_ONNX_LOGE("[DIAG] GetTensorData succeeded, about to cache_.Put");
     cache_.Put(audio_hash, std::vector<float>(result_data, result_data + total),
                std::move(result_shape));
 
@@ -649,8 +702,8 @@ class OfflineTtsPocketImpl : public OfflineTtsImpl {
 
       auto n = out.GetTensorTypeAndShapeInfo().GetShape().back();
 
-      ScaleAdd(out.GetTensorData<float>(), dt, n,
-               x.GetTensorMutableData<float>());
+      ScaleAdd(SafeGetTensorData<float>(out), dt, n,
+               SafeGetTensorMutableData<float>(x));
     }
 
     return std::move(x);

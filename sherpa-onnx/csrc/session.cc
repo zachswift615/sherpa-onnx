@@ -43,7 +43,8 @@ static void OrtStatusFailure(OrtStatus *status, const char *s) {
 
 Ort::SessionOptions GetSessionOptionsImpl(
     int32_t num_threads, const std::string &provider_str,
-    const ProviderConfig *provider_config /*= nullptr*/) {
+    const ProviderConfig *provider_config /*= nullptr*/,
+    bool use_cpu_mem_arena /*= false*/) {
   Provider p = StringToProvider(provider_str);
 
   Ort::SessionOptions sess_opts;
@@ -67,9 +68,13 @@ Ort::SessionOptions GetSessionOptionsImpl(
 
   switch (p) {
     case Provider::kCPU:
-      // Reduce memory growth when input shapes vary (e.g., TTS, ASR)
-      sess_opts.DisableMemPattern();
-      sess_opts.DisableCpuMemArena();
+      if (!use_cpu_mem_arena) {
+        // Reduce memory growth when input shapes vary (e.g., TTS, ASR).
+        // Disabled for autoregressive models (Pocket-TTS) where it causes
+        // uninitialized intermediate tensors and hallucinated output.
+        sess_opts.DisableMemPattern();
+        sess_opts.DisableCpuMemArena();
+      }
       break;
     case Provider::kXnnpack: {
 #if ORT_API_VERSION >= 12

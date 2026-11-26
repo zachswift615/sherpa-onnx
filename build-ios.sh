@@ -5,7 +5,7 @@ set -e
 dir=build-ios
 mkdir -p $dir
 cd $dir
-onnxruntime_version=1.17.1
+onnxruntime_version=1.23.2
 onnxruntime_dir=ios-onnxruntime/$onnxruntime_version
 
 SHERPA_ONNX_GITHUB=github.com
@@ -14,12 +14,32 @@ if [ "$SHERPA_ONNX_GITHUB_MIRROW" == true ]; then
     SHERPA_ONNX_GITHUB=hub.nuaa.cf
 fi
 
-if [ ! -f $onnxruntime_dir/onnxruntime.xcframework/ios-arm64/onnxruntime.a ]; then
+if [ ! -f $onnxruntime_dir/onnxruntime.xcframework/ios-arm64/libonnxruntime.a ]; then
   mkdir -p $onnxruntime_dir
   pushd $onnxruntime_dir
-  wget -c https://${SHERPA_ONNX_GITHUB}/csukuangfj/onnxruntime-libs/releases/download/v${onnxruntime_version}/onnxruntime.xcframework-${onnxruntime_version}.tar.bz2
-  tar xvf onnxruntime.xcframework-${onnxruntime_version}.tar.bz2
-  rm onnxruntime.xcframework-${onnxruntime_version}.tar.bz2
+
+  # ORT >= 1.23.x uses zip packaging with framework bundles
+  wget -c https://${SHERPA_ONNX_GITHUB}/csukuangfj/onnxruntime-libs/releases/download/v${onnxruntime_version}/onnxruntime-ios-static-xcframework-${onnxruntime_version}.zip
+  unzip -o onnxruntime-ios-static-xcframework-${onnxruntime_version}.zip
+  rm onnxruntime-ios-static-xcframework-${onnxruntime_version}.zip
+
+  # Rearrange to match the layout sherpa-onnx CMake expects:
+  #   onnxruntime.xcframework/ios-arm64/onnxruntime.a
+  #   onnxruntime.xcframework/ios-arm64_x86_64-simulator/onnxruntime.a
+  #   onnxruntime.xcframework/Headers/
+  src_dir=onnxruntime-ios-static-xcframework-${onnxruntime_version}/onnxruntime.xcframework
+  dst_dir=onnxruntime.xcframework
+
+  rm -rf $dst_dir
+  mkdir -p $dst_dir/ios-arm64 $dst_dir/ios-arm64_x86_64-simulator $dst_dir/Headers
+
+  cp $src_dir/ios-arm64/onnxruntime.framework/onnxruntime $dst_dir/ios-arm64/libonnxruntime.a
+  cp $src_dir/ios-arm64_x86_64-simulator/onnxruntime.framework/onnxruntime $dst_dir/ios-arm64_x86_64-simulator/libonnxruntime.a
+  cp $src_dir/ios-arm64/onnxruntime.framework/Headers/*.h $dst_dir/Headers/
+  cp $src_dir/Info.plist $dst_dir/
+
+  rm -rf onnxruntime-ios-static-xcframework-${onnxruntime_version}
+
   cd ..
   ln -sf $onnxruntime_version/onnxruntime.xcframework .
   popd

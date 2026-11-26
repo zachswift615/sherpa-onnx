@@ -70,7 +70,7 @@ class OfflineTtsPocketModel::Impl {
   explicit Impl(const OfflineTtsModelConfig &config)
       : config_(config),
         env_(ORT_LOGGING_LEVEL_ERROR),
-        sess_opts_(GetSessionOptions(config)) {
+        sess_opts_(GetSessionOptionsWithArena(config.num_threads, config.provider)) {
     lm_flow_sess_ = std::make_unique<Ort::Session>(
         env_, SHERPA_ONNX_TO_ORT_PATH(config.pocket.lm_flow), sess_opts_);
     InitLmFlow(nullptr, 0);
@@ -97,7 +97,7 @@ class OfflineTtsPocketModel::Impl {
   Impl(Manager *mgr, const OfflineTtsModelConfig &config)
       : config_(config),
         env_(ORT_LOGGING_LEVEL_ERROR),
-        sess_opts_(GetSessionOptions(config)) {
+        sess_opts_(GetSessionOptionsWithArena(config.num_threads, config.provider)) {
     {
       auto buf = ReadFile(mgr, config.pocket.lm_flow);
       InitLmFlow(buf.data(), buf.size());
@@ -148,7 +148,8 @@ class OfflineTtsPocketModel::Impl {
     inputs.push_back(std::move(audio));
 
     auto outputs = mimi_encoder_sess_->Run(
-        {}, mimi_encoder_input_names_ptr_.data(), inputs.data(), inputs.size(),
+        Ort::RunOptions{nullptr}, mimi_encoder_input_names_ptr_.data(),
+        inputs.data(), inputs.size(),
         mimi_encoder_output_names_ptr_.data(),
         mimi_encoder_output_names_ptr_.size());
 
